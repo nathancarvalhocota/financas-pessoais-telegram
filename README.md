@@ -153,36 +153,36 @@ Gera agregações e insights do mês informado como `MM/YY`. Os números são se
 
 ### Entidades
 
-#### `categories`
+#### `categorias`
 - `id` (PK, SERIAL)
 - `nome` (`varchar(100)`, UNIQUE)
 
 **Valores pré-populados:**
 Educação, Lazer / Festa, Restaurante / Lanche, Uber, Mercado, Moto, Compras, Outros, Estética, Limpeza, Saúde e Farmácia.
 
-#### `purchases`
+#### `compras`
 - `id` (PK, SERIAL)
-- `created_at` (`timestamptz`) — data/hora do Telegram, armazenada em UTC
+- `data` (`timestamptz`) — data/hora do Telegram, armazenada em UTC
 - `valor` (`numeric(12,2)`)
 - `descricao` (`varchar(255)`)
-- `category_id` (`int`, FK → `categories.id`)
+- `categoria_id` (`int`, FK → `categorias.id`)
 
 ```sql
-CREATE TABLE categories (
+CREATE TABLE categorias (
     id   SERIAL PRIMARY KEY,
     nome VARCHAR(100) NOT NULL UNIQUE
 );
 
-CREATE TABLE purchases (
+CREATE TABLE compras (
     id          SERIAL PRIMARY KEY,
-    created_at  TIMESTAMPTZ NOT NULL,
+    data  TIMESTAMPTZ NOT NULL,
     valor       NUMERIC(12,2) NOT NULL,
     descricao   VARCHAR(255) NOT NULL,
-    category_id INT NOT NULL REFERENCES categories(id)
+    categoria_id INT NOT NULL REFERENCES categorias(id)
 );
 ```
 
-> **Nota:** análises são sempre geradas sob demanda via queries de agregação. Não há tabela de cache de análises — os dados brutos em `purchases` são a única fonte de verdade.
+> **Nota:** análises são sempre geradas sob demanda via queries de agregação. Não há tabela de cache de análises — os dados brutos em `compras` são a única fonte de verdade.
 
 ---
 
