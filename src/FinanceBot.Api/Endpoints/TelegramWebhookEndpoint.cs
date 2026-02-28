@@ -18,6 +18,7 @@ public static class TelegramWebhookEndpoint
 
     private static async Task<IResult> HandleWebhookAsync(
         TelegramWebhookRequest? update,
+        ITelegramCommandRouter telegramCommandRouter,
         ITelegramMessageSender telegramMessageSender,
         IOptions<TelegramOptions> telegramOptions,
         ILoggerFactory loggerFactory,
@@ -46,7 +47,11 @@ public static class TelegramWebhookEndpoint
         }
 
         string receivedText = update.Message.Text.Trim();
-        string responseText = BuildResponseText(receivedText);
+        DateTimeOffset messageDateUtc = ResolveMessageDateUtc(update.Message);
+        string responseText = await telegramCommandRouter.RouteAsync(
+            receivedText,
+            messageDateUtc,
+            cancellationToken);
 
         try
         {
@@ -67,33 +72,13 @@ public static class TelegramWebhookEndpoint
         return Results.Ok();
     }
 
-    private static string BuildResponseText(string receivedText)
+    private static DateTimeOffset ResolveMessageDateUtc(TelegramMessageRequest messageRequest)
     {
-        if (receivedText.StartsWith("/start", StringComparison.OrdinalIgnoreCase))
+        if (messageRequest.Date.HasValue)
         {
-            return "FinanceBot online. Use /compra, /listar, /deletar or /analise.";
+            return DateTimeOffset.FromUnixTimeSeconds(messageRequest.Date.Value);
         }
 
-        if (receivedText.StartsWith("/compra", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Comando /compra recebido. Regras de negocio serao adicionadas no proximo passo.";
-        }
-
-        if (receivedText.StartsWith("/listar", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Comando /listar recebido. Regras de negocio serao adicionadas no proximo passo.";
-        }
-
-        if (receivedText.StartsWith("/deletar", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Comando /deletar recebido. Regras de negocio serao adicionadas no proximo passo.";
-        }
-
-        if (receivedText.StartsWith("/analise", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Comando /analise recebido. Regras de negocio serao adicionadas no proximo passo.";
-        }
-
-        return "Comando nao reconhecido. Use /compra, /listar, /deletar ou /analise.";
+        return DateTimeOffset.UtcNow;
     }
 }

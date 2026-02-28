@@ -1,8 +1,11 @@
 using FinanceBot.Api.Endpoints;
+using FinanceBot.Application.Abstractions;
+using FinanceBot.Application.UseCases;
 using FinanceBot.Infrastructure.DependencyInjection;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddUserSecrets<Program>(optional: true, reloadOnChange: true);
+builder.Services.AddScoped<ITelegramCommandRouter, TelegramCommandRouter>();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 WebApplication app = builder.Build();

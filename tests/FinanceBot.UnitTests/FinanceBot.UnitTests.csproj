@@ -23,5 +23,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\FinanceBot.Application\FinanceBot.Application.csproj" />
     <ProjectReference Include="..\..\src\FinanceBot.Domain\FinanceBot.Domain.csproj" />
+    <ProjectReference Include="..\..\src\FinanceBot.Infrastructure\FinanceBot.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

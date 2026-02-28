@@ -13,6 +13,215 @@ For every new implementation from now on, this file must be updated with:
 
 ## Change Log
 
+### 2026-02-28 - /compra now returns specific invalid category feedback
+Scope:
+- Improved `/compra` validation feedback when category does not exist.
+- Added support for Telegram command mention format (`/compra@BotName`).
+
+Modified:
+- `src/FinanceBot.Application/UseCases/TelegramCommandRouter.cs`
+- `tests/FinanceBot.IntegrationTests/Api/TelegramWebhookEndpointTests.cs`
+
+Added:
+- `tests/FinanceBot.UnitTests/Application/TelegramCommandRouterTests.cs`
+
+Implemented behavior:
+- `/compra` now returns:
+- `Categoria inexistente: <categoria>. Categorias disponiveis: ...`
+- Categories list is now built dynamically from `Categoria` enum display mapping.
+- `/compra@BotName` is accepted with the same parsing rules as `/compra`.
+
+Decisions:
+- Specific validation messages reduce user friction in Telegram flows and avoid generic guidance.
+- Supporting command mention format improves compatibility with group chats.
+
+Validation:
+- `dotnet test FinanceBot.sln` executed after changes.
+
+### 2026-02-28 - Database connection string now resolved from user-secrets/config sources
+Scope:
+- Updated runtime and EF design-time database configuration to remove hardcoded fallback connection strings.
+- Enabled EF CLI to read `ConnectionStrings:DefaultConnection` from user-secrets in Infrastructure project.
+
+Modified:
+- `src/FinanceBot.Infrastructure/Persistence/FinanceBotDbContextFactory.cs`
+- `src/FinanceBot.Infrastructure/DependencyInjection/InfrastructureServiceCollectionExtensions.cs`
+- `src/FinanceBot.Infrastructure/FinanceBot.Infrastructure.csproj`
+- `tests/FinanceBot.UnitTests/Infrastructure/FinanceBotDbContextFactoryTests.cs`
+
+Added:
+- `tests/FinanceBot.UnitTests/Infrastructure/InfrastructureServiceCollectionExtensionsTests.cs`
+
+Implemented behavior:
+- `FinanceBotDbContextFactory` now resolves connection string in this order:
+- `ConnectionStrings__DefaultConnection` environment variable.
+- User-secrets (`ConnectionStrings:DefaultConnection`).
+- Runtime DI now requires `ConnectionStrings:DefaultConnection` and throws a clear error when missing.
+- Removed runtime fallback to hardcoded local Postgres credentials.
+- Added Infrastructure `UserSecretsId` and `Microsoft.Extensions.Configuration.UserSecrets` package.
+
+Decisions:
+- Avoiding hardcoded credentials reduces accidental secret leaks and prevents ambiguous source-of-truth behavior.
+- EF design-time and runtime now follow the same configuration contract (`ConnectionStrings:DefaultConnection`).
+
+Validation:
+- `dotnet test FinanceBot.sln` executed after changes.
+
+### 2026-02-23 - EF design-time DbContext factory for migrations/update
+Scope:
+- Fixed `dotnet ef database update --project src/FinanceBot.Infrastructure` design-time creation.
+
+Added:
+- `src/FinanceBot.Infrastructure/Persistence/FinanceBotDbContextFactory.cs`
+- `tests/FinanceBot.UnitTests/Infrastructure/FinanceBotDbContextFactoryTests.cs`
+
+Implemented behavior:
+- Added `IDesignTimeDbContextFactory<FinanceBotDbContext>` implementation.
+- Factory now creates `FinanceBotDbContext` for EF CLI commands without API host bootstrapping.
+- Supports `ConnectionStrings__DefaultConnection` environment variable.
+- Uses local default Postgres connection string when environment variable is absent.
+
+Decisions:
+- EF CLI design-time operations require explicit context construction when startup host is not used.
+- A dedicated factory avoids command failures and keeps migrations/update independent from runtime boot.
+
+Validation:
+- `dotnet build FinanceBot.sln` completed successfully.
+- `dotnet test FinanceBot.sln` completed successfully.
+
+### 2026-02-23 - Command services for /compra, /listar, /deletar
+Scope:
+- Implemented command routing and database-backed services for purchase lifecycle commands.
+- Updated webhook flow to delegate command parsing/execution to Application layer.
+- Added integration tests for all command flows.
+
+Added:
+- `src/FinanceBot.Application/Abstractions/ICompraRepository.cs`
+- `src/FinanceBot.Application/Abstractions/ITelegramCommandRouter.cs`
+- `src/FinanceBot.Application/UseCases/TelegramCommandRouter.cs`
+- `src/FinanceBot.Infrastructure/Repositories/CompraRepository.cs`
+
+Modified:
+- `src/FinanceBot.Api/Program.cs`
+- `src/FinanceBot.Api/Endpoints/TelegramWebhookEndpoint.cs`
+- `src/FinanceBot.Api/Endpoints/Contracts/TelegramWebhookRequest.cs`
+- `src/FinanceBot.Api/appsettings.json`
+- `src/FinanceBot.Infrastructure/DependencyInjection/InfrastructureServiceCollectionExtensions.cs`
+- `tests/FinanceBot.IntegrationTests/Api/TelegramWebhookEndpointTests.cs`
+- `tests/FinanceBot.IntegrationTests/FinanceBot.IntegrationTests.csproj`
+
+Implemented behavior:
+- Added command router service with handlers:
+- `/compra`: validates input, parses value/category, persists expense, and returns confirmation.
+- `/listar`: validates `MM/YY`, lists month expenses ordered by date, and returns total.
+- `/deletar`: validates ID, removes existing expense, and returns removal summary.
+- Added category normalization to parse labels with accents/special characters.
+- Added Telegram `message.date` support in webhook payload contract.
+- Webhook now delegates business behavior to `ITelegramCommandRouter`.
+- Added EF repository implementation for `Compra` operations.
+- Added database context registration and repository wiring in Infrastructure DI.
+
+Tests added/updated:
+- Integration tests now validate:
+- `/compra` creates DB record and returns confirmation message.
+- `/listar` returns seeded month records and correct total.
+- `/deletar` removes DB record and returns summary.
+- Existing webhook tests for `/start`, empty text, and missing `ChatId` remain green.
+- Added `Microsoft.EntityFrameworkCore.InMemory` for deterministic integration tests.
+
+Decisions:
+- Parsing/validation/business response generation belongs in Application service,
+- while persistence belongs in Infrastructure repository.
+- In-memory EF provider is used only in tests
+- to validate command behavior without external DB dependency.
+- Webhook remains thin and resilient, focused on I/O + orchestration.
+
+Validation:
+- `dotnet build FinanceBot.sln` completed successfully with 0 errors and 0 warnings.
+- `dotnet test FinanceBot.sln` completed successfully:
+- Unit tests passed: 3/3.
+- Integration tests passed: 6/6.
+
+### 2026-02-23 - Webhook and Telegram messaging automated tests
+Scope:
+- Added automated tests for webhook receive flow and Telegram send flow.
+
+Added:
+- `tests/FinanceBot.IntegrationTests/Api/TelegramWebhookEndpointTests.cs`
+- `tests/FinanceBot.UnitTests/Infrastructure/TelegramMessageSenderTests.cs`
+
+Modified:
+- `tests/FinanceBot.UnitTests/FinanceBot.UnitTests.csproj`
+
+Implemented behavior:
+- Integration tests validate webhook endpoint behavior:
+- receives `/start` and sends a reply with configured chat id.
+- ignores empty text and still returns `200 OK`.
+- returns `200 OK` and does not send message when `Telegram:ChatId` is missing.
+- Unit tests validate Telegram sender behavior:
+- builds correct `sendMessage` endpoint URL and JSON payload.
+- skips outbound HTTP call when token is empty.
+- does not throw exceptions when Telegram API returns error status.
+
+Decisions:
+- Integration tests use `WebApplicationFactory<Program>` and service replacement
+- to isolate sender side effects.
+- Unit tests use custom `HttpMessageHandler` for deterministic transport assertions.
+- The test setup keeps webhook semantics aligned with production
+- (`200 OK` for invalid or incomplete updates).
+
+Validation:
+- `dotnet test FinanceBot.sln` completed successfully.
+- Unit tests passed: 3/3.
+- Integration tests passed: 3/3.
+
+### 2026-02-23 - EF Core package version alignment
+Scope:
+- Aligned Entity Framework Core package versions in Infrastructure to remove assembly conflicts.
+
+Modified:
+- `src/FinanceBot.Infrastructure/FinanceBot.Infrastructure.csproj`
+
+Implemented behavior:
+- Changed `Microsoft.EntityFrameworkCore` from `8.0.14` to `8.0.4`.
+- Changed `Microsoft.EntityFrameworkCore.Design` from `8.0.14` to `8.0.4`.
+- Kept `Npgsql.EntityFrameworkCore.PostgreSQL` in `8.0.4` for compatibility.
+
+Decisions:
+- Mixed EF package versions generate binding warnings and can lead to runtime inconsistencies.
+- Version alignment keeps build output clean and deterministic.
+
+Validation:
+- `dotnet build FinanceBot.sln` completed successfully with 0 errors and 0 warnings.
+
+### 2026-02-23 - Initial database model objects (Compra + Categoria)
+Scope:
+- Added first domain entity and enum for persistence model.
+- Added EF Core DbContext and mapping for `Compra`.
+
+Added:
+- `src/FinanceBot.Domain/Entities/Compra.cs`
+- `src/FinanceBot.Domain/Enums/Categoria.cs`
+- `src/FinanceBot.Infrastructure/Persistence/FinanceBotDbContext.cs`
+
+Implemented behavior:
+- Created entity `Compra` with attributes:
+- `double Valor`
+- `string Descricao`
+- `Categoria Categoria`
+- `DateTime Data`
+- Added identity field `Id` for persistence key.
+- Created enum `Categoria` with all requested category options.
+- Added EF Core mapping for table `compras` with required fields and string conversion for enum.
+
+Decisions:
+- Entity and enum were placed in Domain to keep business model independent from infrastructure.
+- DbContext and relational mapping were placed in Infrastructure to respect separation of concerns.
+- Enum is persisted as string to keep database values readable and avoid ordinal-coupling issues.
+
+Validation:
+- `dotnet build FinanceBot.sln` completed successfully with 0 errors and 0 warnings.
+
 ### 2026-02-18 - Documentation expanded with webhook runbook
 Scope:
 - Added consolidated implementation summary and operational guide for ngrok/webhook setup.
@@ -132,7 +341,8 @@ Created folder structure:
 - `src/FinanceBot.Infrastructure`
 - `tests/FinanceBot.UnitTests`
 - `tests/FinanceBot.IntegrationTests`
-- Supporting subfolders for endpoints, DI, abstractions, use cases, persistence, repositories, and telegram.
+- Supporting subfolders for endpoints, DI, abstractions, use cases, persistence,
+- repositories, and telegram.
 
 Decisions:
 - Adopted layered architecture (`Api -> Application <- Infrastructure`, with `Domain` as core).
@@ -219,9 +429,12 @@ Prerequisites:
 
 1. Configure user secrets in API project:
 ```powershell
-dotnet user-secrets set "Telegram:BotToken" "SEU_BOT_TOKEN" --project c:\dev\financas-pessoais\src\FinanceBot.Api
-dotnet user-secrets set "Telegram:ChatId" "SEU_CHAT_ID" --project c:\dev\financas-pessoais\src\FinanceBot.Api
-dotnet user-secrets list --project c:\dev\financas-pessoais\src\FinanceBot.Api
+dotnet user-secrets set "Telegram:BotToken" "SEU_BOT_TOKEN" `
+  --project c:\dev\financas-pessoais\src\FinanceBot.Api
+dotnet user-secrets set "Telegram:ChatId" "SEU_CHAT_ID" `
+  --project c:\dev\financas-pessoais\src\FinanceBot.Api
+dotnet user-secrets list `
+  --project c:\dev\financas-pessoais\src\FinanceBot.Api
 ```
 
 2. Run API in Development:
@@ -243,7 +456,8 @@ ngrok http https://localhost:5001
 
 4. Register webhook in Telegram:
 ```powershell
-curl.exe "https://api.telegram.org/bot<SEU_BOT_TOKEN>/setWebhook?url=https://<SEU_DOMINIO_NGROK>/telegram/webhook"
+$webhookUrl = "https://<SEU_DOMINIO_NGROK>/telegram/webhook"
+curl.exe "https://api.telegram.org/bot<SEU_BOT_TOKEN>/setWebhook?url=$webhookUrl"
 ```
 
 5. Validate webhook status:

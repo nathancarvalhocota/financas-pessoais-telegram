@@ -15,6 +15,9 @@ public sealed class TelegramMessageRequest
 
     [JsonPropertyName("text")]
     public string? Text { get; init; }
+
+    [JsonPropertyName("date")]
+    public long? Date { get; init; }
 }
 
 public sealed class TelegramChatRequest
