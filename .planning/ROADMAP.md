@@ -21,13 +21,14 @@ MVP já entregue (comandos /compra, /listar, /deletar, /analise, /info). Este ro
   3. Quando soma de compras da categoria no mês corrente supera o limite, resposta inclui linha de alerta em vez da linha de progresso
   4. Em mês seguinte ao cadastro do limite, progresso é calculado do zero (apenas gastos do mês corrente contam)
   5. Categoria sem limite definida não exibe linha de progresso — comportamento do /compra original é preservado
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: TBD
+- [ ] 01-01-PLAN.md — Data layer: LimiteCategoria entity, ILimiteCategoriaRepository, EF Core config e migration
+- [ ] 01-02-PLAN.md — Command handling: handler /limite, progresso no /compra, testes unitários
 
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Limites mensais por categoria | 0/? | Not started | - |
+| 1. Limites mensais por categoria | 0/2 | Not started | - |
