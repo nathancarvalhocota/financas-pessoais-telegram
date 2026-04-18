@@ -27,12 +27,16 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         "^/limite(?:@[A-Za-z0-9_]+)?\\s+(\\S+)\\s+([0-9]+(?:[.,][0-9]{1,2})?)\\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
+    private static readonly Regex LimiteConsultaCommandRegex = new Regex(
+        "^/limite(?:@[A-Za-z0-9_]+)?\\s+(\\S+)\\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
     private static readonly Dictionary<string, Categoria> CategoriasPorTextoNormalizado =
         new Dictionary<string, Categoria>(StringComparer.Ordinal)
         {
             ["educacao"] = Categoria.Educacao,
-            ["lazerfesta"] = Categoria.LazerFesta,
-            ["restaurantelanche"] = Categoria.RestauranteLanche,
+            ["lazer"] = Categoria.Lazer,
+            ["lanches"] = Categoria.Lanches,
             ["uber"] = Categoria.Uber,
             ["mercado"] = Categoria.Mercado,
             ["moto"] = Categoria.Moto,
@@ -40,8 +44,33 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             ["outros"] = Categoria.Outros,
             ["estetica"] = Categoria.Estetica,
             ["limpeza"] = Categoria.Limpeza,
-            ["saudeefarmacia"] = Categoria.SaudeEFarmacia
+            ["saude"] = Categoria.Saude
         };
+
+    private const string InfoText =
+        "FinanceBot - Comandos disponíveis:\n\n" +
+        "/compra <VALOR>, <DESCRICAO>, <CATEGORIA>\n" +
+        "Registra uma despesa. Valor aceita virgula ou ponto.\n" +
+        "Ex: /compra 58,90, Almoço, Mercado\n\n" +
+        "/listar <MM/AA>\n" +
+        "Lista as compras do mês com ID, data, valor e categoria.\n" +
+        "Omita o mês para listar o mês atual.\n" +
+        "Ex: /listar 04/26\n\n" +
+        "/deletar <ID>\n" +
+        "Remove uma compra pelo ID exibido no /listar.\n" +
+        "Ex: /deletar 42\n\n" +
+        "/analise <MM/AA>\n" +
+        "Exibe total gasto, breakdown por categoria e comparação com mês anterior.\n" +
+        "Ex: /analise 04/26\n\n" +
+        "/limite <CATEGORIA> <VALOR>\n" +
+        "Define um limite mensal de gastos para a categoria.\n" +
+        "Use valor 0 para remover o limite.\n" +
+        "Ex: /limite Mercado 800\n" +
+        "Ex: /limite Mercado 0  (remove o limite)\n\n" +
+        "/limite <CATEGORIA>\n" +
+        "Consulta o limite definido e o gasto atual do mês.\n" +
+        "Ex: /limite Mercado\n\n" +
+        "Categorias: Educacao, Lazer, Lanches, Uber, Mercado, Moto, Compras, Outros, Estetica, Limpeza, Saude";
 
     private readonly ICompraRepository _compraRepository;
     private readonly ILimiteCategoriaRepository _limiteCategoriaRepository;
@@ -82,10 +111,15 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
 
         if (normalizedMessageText.StartsWith("/start", StringComparison.OrdinalIgnoreCase))
         {
-            return "FinanceBot online. Use /compra, /listar ou /deletar.";
+            return "FinanceBot online. Use /info para ver todos os comandos.";
         }
 
-        return "Comando nao reconhecido. Use /compra, /listar ou /deletar.";
+        if (normalizedMessageText.StartsWith("/info", StringComparison.OrdinalIgnoreCase))
+        {
+            return InfoText;
+        }
+
+        return "Comando nao reconhecido. Use /info para ver os comandos disponíveis.";
     }
 
     private async Task<string> HandleCompraAsync(
@@ -191,10 +225,17 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         string messageText,
         CancellationToken cancellationToken)
     {
+        Match consultaMatch = LimiteConsultaCommandRegex.Match(messageText);
+        if (consultaMatch.Success && !LimiteCommandRegex.IsMatch(messageText))
+        {
+            return await HandleLimiteConsultaAsync(consultaMatch, cancellationToken);
+        }
+
         Match commandMatch = LimiteCommandRegex.Match(messageText);
         if (!commandMatch.Success)
         {
-            return "Uso correto: /limite <CATEGORIA> <VALOR>. Exemplo: /limite Mercado 800";
+            return "Uso correto: /limite <CATEGORIA> <VALOR>. Exemplo: /limite Mercado 800\n" +
+                "Para consultar: /limite <CATEGORIA>. Exemplo: /limite Mercado";
         }
 
         string categoriaText = commandMatch.Groups[1].Value.Trim();
@@ -244,6 +285,46 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
 
         string formattedValor = valor.ToString("N2", PtBrCulture);
         return $"Limite de {categoriaDisplayName} definido: R$ {formattedValor}";
+    }
+
+    private async Task<string> HandleLimiteConsultaAsync(
+        Match consultaMatch,
+        CancellationToken cancellationToken)
+    {
+        string categoriaText = consultaMatch.Groups[1].Value.Trim();
+        bool categoriaReconhecida = TryParseCategoria(categoriaText, out Categoria categoria);
+        if (!categoriaReconhecida)
+        {
+            return $"Categoria '{categoriaText}' inexistente.\n\nCategorias disponiveis:\n" +
+                BuildCategoriasValidas();
+        }
+
+        string categoriaDisplayName = GetCategoriaDisplayName(categoria);
+        LimiteCategoria? limite = await _limiteCategoriaRepository
+            .GetByCategoriaAsync(categoria, cancellationToken);
+
+        if (limite is null)
+        {
+            return $"Nenhum limite definido para {categoriaDisplayName}.";
+        }
+
+        DateTime now = DateTime.UtcNow;
+        DateTime periodStartUtc = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        DateTime periodEndUtc = periodStartUtc.AddMonths(1);
+
+        IReadOnlyList<Compra> comprasDoMes = await _compraRepository.ListByPeriodAsync(
+            periodStartUtc, periodEndUtc, cancellationToken);
+
+        double totalGasto = comprasDoMes
+            .Where(c => c.Categoria == categoria)
+            .Sum(c => c.Valor);
+
+        double percentual = totalGasto / limite.Valor * 100;
+        string formattedGasto = totalGasto.ToString("N2", PtBrCulture);
+        string formattedLimite = limite.Valor.ToString("N2", PtBrCulture);
+        string formattedPercentual = percentual.ToString("0", PtBrCulture);
+
+        return $"{categoriaDisplayName}: R$ {formattedGasto} de R$ {formattedLimite} ({formattedPercentual}%)";
     }
 
     private async Task<string> HandleListarAsync(
@@ -299,13 +380,13 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             totalMonthValue += compra.Valor;
             string formattedValue = compra.Valor.ToString("N2", PtBrCulture);
             string categoriaDisplayName = GetCategoriaDisplayName(compra.Categoria);
-            messageBuilder.AppendLine(
-                $"{compra.Id} | {compra.Data:dd/MM/yyyy HH:mm} | R$ {formattedValue} | " +
-                $"{compra.Descricao} | {categoriaDisplayName}");
+            messageBuilder.AppendLine();
+            messageBuilder.AppendLine($"[{compra.Id}] {categoriaDisplayName} — R$ {formattedValue}");
+            messageBuilder.AppendLine($"    {compra.Descricao} · {compra.Data:dd/MM HH:mm}");
         }
 
         string formattedTotalMonthValue = totalMonthValue.ToString("N2", PtBrCulture);
-        messageBuilder.Append($"Total: R$ {formattedTotalMonthValue}");
+        messageBuilder.Append($"\nTotal: R$ {formattedTotalMonthValue}");
         return messageBuilder.ToString();
     }
 
@@ -388,11 +469,10 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
     {
         Categoria[] categorias = Enum.GetValues<Categoria>();
         List<string> categoriasValidas = new List<string>(categorias.Length);
+        
         foreach (Categoria categoria in categorias)
-        {
             categoriasValidas.Add(GetCategoriaDisplayName(categoria));
-        }
-
+        
         return string.Join("\n", categoriasValidas);
     }
 
@@ -401,8 +481,8 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         return categoria switch
         {
             Categoria.Educacao => "Educacao",
-            Categoria.LazerFesta => "Lazer / Festa",
-            Categoria.RestauranteLanche => "Restaurante / Lanche",
+            Categoria.Lazer => "Lazer",
+            Categoria.Lanches => "Lanches",
             Categoria.Uber => "Uber",
             Categoria.Mercado => "Mercado",
             Categoria.Moto => "Moto",
@@ -410,7 +490,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             Categoria.Outros => "Outros",
             Categoria.Estetica => "Estetica",
             Categoria.Limpeza => "Limpeza",
-            Categoria.SaudeEFarmacia => "Saude e Farmacia",
+            Categoria.Saude => "Saude",
             _ => categoria.ToString()
         };
     }

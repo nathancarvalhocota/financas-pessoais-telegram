@@ -186,6 +186,44 @@ CREATE TABLE compras (
 
 ---
 
+## Setup Local (Desenvolvimento)
+
+### Pré-requisitos
+- .NET 8 SDK
+- PostgreSQL instalado (serviço Windows: `postgresql-x64-18`)
+- `cloudflared` instalado (`winget install Cloudflare.cloudflared`)
+
+### 1. Configurar secrets
+As credenciais são gerenciadas via **user-secrets** (nunca commitar senhas):
+```bash
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=financebot;Username=postgres;Password=SUA_SENHA" --project src/FinanceBot.Api
+dotnet user-secrets set "Telegram:BotToken" "SEU_TOKEN" --project src/FinanceBot.Api
+dotnet user-secrets set "Telegram:ChatId" "SEU_CHAT_ID" --project src/FinanceBot.Api
+```
+
+> Token do bot: `@BotFather` no Telegram → `/mybots` → selecionar o bot → **API Token**
+
+### 2. Aplicar migrations
+O banco é criado automaticamente se não existir:
+```bash
+dotnet ef database update --project src/FinanceBot.Infrastructure --startup-project src/FinanceBot.Api
+```
+
+### 3. Expor a API localmente (webhook)
+Com a API rodando, abra outro terminal:
+```bash
+cloudflared tunnel --url http://localhost:5001
+```
+
+Copie a URL gerada (ex: `https://xxxx.trycloudflare.com`) e registre o webhook — **atenção ao path `/telegram/webhook` no final**:
+```
+https://api.telegram.org/bot{SEU_TOKEN}/setWebhook?url=https://xxxx.trycloudflare.com/telegram/webhook
+```
+
+> A URL muda a cada execução do tunnel — re-registre o webhook sempre que reiniciar o cloudflared.
+
+---
+
 ## Webhook do Telegram
 
 ### Configuração do bot (BotFather)

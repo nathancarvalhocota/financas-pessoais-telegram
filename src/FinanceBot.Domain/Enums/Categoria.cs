@@ -3,8 +3,8 @@ namespace FinanceBot.Domain.Enums;
 public enum Categoria
 {
     Educacao = 1,
-    LazerFesta = 2,
-    RestauranteLanche = 3,
+    Lazer = 2,
+    Lanches = 3,
     Uber = 4,
     Mercado = 5,
     Moto = 6,
@@ -12,5 +12,5 @@ public enum Categoria
     Outros = 8,
     Estetica = 9,
     Limpeza = 10,
-    SaudeEFarmacia = 11
+    Saude = 11
 }

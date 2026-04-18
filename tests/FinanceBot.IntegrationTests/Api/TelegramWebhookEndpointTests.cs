@@ -171,7 +171,7 @@ public sealed class TelegramWebhookEndpointTests
             {
                 Valor = 20.00,
                 Descricao = "Lanche",
-                Categoria = Categoria.RestauranteLanche,
+                Categoria = Categoria.Lanches,
                 Data = januaryDate.AddDays(1)
             };
             financeBotDbContext.Compras.AddRange(compra1, compra2);

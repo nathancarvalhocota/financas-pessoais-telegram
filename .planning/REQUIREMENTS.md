@@ -13,11 +13,6 @@
 - [ ] **LIMITE-04**: Quando gasto acumulado do mês supera o limite, bot emite alerta explícito (ex: "⚠ Limite de Mercado ultrapassado: R$ 820,00 de R$ 800,00")
 - [ ] **LIMITE-05**: Limite persiste entre meses; o progresso é recalculado a partir dos gastos do mês corrente, sem necessidade de re-cadastro
 
-## v2 Requirements
-
-- Notificação proativa ao atingir X% do limite — requer polling ativo fora do escopo atual
-- Limite global sem categoria específica
-
 ## Out of Scope
 
 | Feature | Reason |
