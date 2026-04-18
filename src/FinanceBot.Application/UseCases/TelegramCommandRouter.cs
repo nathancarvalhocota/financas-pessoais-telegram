@@ -23,6 +23,10 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         "^/deletar\\s+(\\d+)\\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
+    private static readonly Regex LimiteCommandRegex = new Regex(
+        "^/limite(?:@[A-Za-z0-9_]+)?\\s+(\\S+)\\s+([0-9]+(?:[.,][0-9]{1,2})?)\\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
     private static readonly Dictionary<string, Categoria> CategoriasPorTextoNormalizado =
         new Dictionary<string, Categoria>(StringComparer.Ordinal)
         {
@@ -40,10 +44,14 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         };
 
     private readonly ICompraRepository _compraRepository;
+    private readonly ILimiteCategoriaRepository _limiteCategoriaRepository;
 
-    public TelegramCommandRouter(ICompraRepository compraRepository)
+    public TelegramCommandRouter(
+        ICompraRepository compraRepository,
+        ILimiteCategoriaRepository limiteCategoriaRepository)
     {
         _compraRepository = compraRepository;
+        _limiteCategoriaRepository = limiteCategoriaRepository;
     }
 
     public async Task<string> RouteAsync(
@@ -65,6 +73,11 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         if (normalizedMessageText.StartsWith("/deletar", StringComparison.OrdinalIgnoreCase))
         {
             return await HandleDeletarAsync(normalizedMessageText, cancellationToken);
+        }
+
+        if (normalizedMessageText.StartsWith("/limite", StringComparison.OrdinalIgnoreCase))
+        {
+            return await HandleLimiteAsync(normalizedMessageText, cancellationToken);
         }
 
         if (normalizedMessageText.StartsWith("/start", StringComparison.OrdinalIgnoreCase))
@@ -128,7 +141,109 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
 
         string formattedValor = valor.ToString("N2", PtBrCulture);
         string categoriaDisplayName = GetCategoriaDisplayName(categoria);
-        return $"Compra registrada: R$ {formattedValor} - {categoriaDisplayName}";
+        string baseResponse = $"Compra registrada: R$ {formattedValor} - {categoriaDisplayName}";
+
+        LimiteCategoria? limite = await _limiteCategoriaRepository
+            .GetByCategoriaAsync(categoria, cancellationToken);
+
+        if (limite is null)
+        {
+            return baseResponse;
+        }
+
+        DateTime periodStartUtc = new DateTime(
+            compraDateUtc.Year,
+            compraDateUtc.Month,
+            1,
+            0,
+            0,
+            0,
+            DateTimeKind.Utc);
+        DateTime periodEndUtc = periodStartUtc.AddMonths(1);
+
+        IReadOnlyList<Compra> comprasDoMes = await _compraRepository.ListByPeriodAsync(
+            periodStartUtc,
+            periodEndUtc,
+            cancellationToken);
+
+        double gastoAcumulado = 0;
+        foreach (Compra c in comprasDoMes)
+        {
+            if (c.Categoria == categoria)
+            {
+                gastoAcumulado += c.Valor;
+            }
+        }
+
+        string formattedGasto = gastoAcumulado.ToString("N2", PtBrCulture);
+        string formattedLimite = limite.Valor.ToString("N2", PtBrCulture);
+
+        if (gastoAcumulado > limite.Valor)
+        {
+            return $"{baseResponse}\n⚠ Limite de {categoriaDisplayName} ultrapassado: R$ {formattedGasto} de R$ {formattedLimite}";
+        }
+
+        int percentual = (int)Math.Round(gastoAcumulado / limite.Valor * 100);
+        return $"{baseResponse}\n{categoriaDisplayName}: R$ {formattedGasto} de R$ {formattedLimite} ({percentual}%)";
+    }
+
+    private async Task<string> HandleLimiteAsync(
+        string messageText,
+        CancellationToken cancellationToken)
+    {
+        Match commandMatch = LimiteCommandRegex.Match(messageText);
+        if (!commandMatch.Success)
+        {
+            return "Uso correto: /limite <CATEGORIA> <VALOR>. Exemplo: /limite Mercado 800";
+        }
+
+        string categoriaText = commandMatch.Groups[1].Value.Trim();
+        string valorText = commandMatch.Groups[2].Value;
+
+        bool categoriaReconhecida = TryParseCategoria(categoriaText, out Categoria categoria);
+        if (!categoriaReconhecida)
+        {
+            return $"Categoria '{categoriaText}' inexistente.\n\nCategorias disponiveis:\n" +
+                BuildCategoriasValidas();
+        }
+
+        string normalizedValorText = valorText.Replace(',', '.');
+        bool parsedValor = double.TryParse(
+            normalizedValorText,
+            NumberStyles.AllowDecimalPoint,
+            CultureInfo.InvariantCulture,
+            out double valor);
+
+        if (!parsedValor || valor < 0)
+        {
+            return "Valor invalido. Use um numero positivo ou 0 para remover o limite.";
+        }
+
+        string categoriaDisplayName = GetCategoriaDisplayName(categoria);
+
+        if (valor == 0)
+        {
+            LimiteCategoria? existing = await _limiteCategoriaRepository
+                .GetByCategoriaAsync(categoria, cancellationToken);
+
+            if (existing is not null)
+            {
+                await _limiteCategoriaRepository.DeleteAsync(existing, cancellationToken);
+            }
+
+            return $"Limite de {categoriaDisplayName} removido";
+        }
+
+        LimiteCategoria limiteCategoria = new LimiteCategoria
+        {
+            Categoria = categoria,
+            Valor = valor
+        };
+
+        await _limiteCategoriaRepository.UpsertAsync(limiteCategoria, cancellationToken);
+
+        string formattedValor = valor.ToString("N2", PtBrCulture);
+        return $"Limite de {categoriaDisplayName} definido: R$ {formattedValor}";
     }
 
     private async Task<string> HandleListarAsync(
