@@ -25,7 +25,7 @@ MVP já entregue (comandos /compra, /listar, /deletar, /analise, /info). Este ro
 
 Plans:
 - [x] 01-01-PLAN.md — Data layer: LimiteCategoria entity, ILimiteCategoriaRepository, EF Core config e migration
-- [ ] 01-02-PLAN.md — Command handling: handler /limite, progresso no /compra, testes unitários
+- [x] 01-02-PLAN.md — Command handling: handler /limite, progresso no /compra, testes unitários
 
 ## Progress
 
