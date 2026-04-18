@@ -32,6 +32,7 @@ public static class InfrastructureServiceCollectionExtensions
             configuration.GetSection(TelegramOptions.SectionName));
         services.AddHttpClient<ITelegramMessageSender, TelegramMessageSender>();
         services.AddScoped<ICompraRepository, CompraRepository>();
+        services.AddScoped<ILimiteCategoriaRepository, LimiteCategoriaRepository>();
 
         return services;
     }
