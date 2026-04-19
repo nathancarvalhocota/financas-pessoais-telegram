@@ -29,7 +29,7 @@ public sealed class InfrastructureServiceCollectionExtensionsTests
             ["ConnectionStrings:DefaultConnection"] =
                 "Host=localhost;Port=5432;Database=financebot_test;Username=postgres;Password=postgres",
             ["Telegram:BotToken"] = "token",
-            ["Telegram:ChatId"] = "123"
+            ["Telegram:AllowedChatIds:0"] = "123"
         };
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(settings)

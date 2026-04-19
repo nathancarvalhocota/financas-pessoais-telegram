@@ -20,7 +20,7 @@ public sealed class TelegramWebhookEndpointTests
     [Fact]
     public async Task PostWebhook_WithStartCommand_ReturnsOkAndSendsReply()
     {
-        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(112233);
+        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(998877);
         HttpClient httpClient = financeBotApiFactory.CreateClient();
 
         TelegramWebhookRequest webhookRequest = new TelegramWebhookRequest
@@ -42,16 +42,16 @@ public sealed class TelegramWebhookEndpointTests
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
         SentTelegramMessage sentTelegramMessage = Assert.Single(
             financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
-        Assert.Equal(112233, sentTelegramMessage.ChatId);
+        Assert.Equal(998877, sentTelegramMessage.ChatId);
         Assert.Equal(
-            "FinanceBot online. Use /compra, /listar ou /deletar.",
+            "FinanceBot online. Use /info para ver todos os comandos.",
             sentTelegramMessage.Text);
     }
 
     [Fact]
     public async Task PostWebhook_WithEmptyText_ReturnsOkWithoutSendingReply()
     {
-        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(112233);
+        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(998877);
         HttpClient httpClient = financeBotApiFactory.CreateClient();
 
         TelegramWebhookRequest webhookRequest = new TelegramWebhookRequest
@@ -77,7 +77,7 @@ public sealed class TelegramWebhookEndpointTests
     [Fact]
     public async Task PostWebhook_WithCompraCommand_PersistsExpenseAndSendsConfirmation()
     {
-        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(112233);
+        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(998877);
         HttpClient httpClient = financeBotApiFactory.CreateClient();
 
         TelegramWebhookRequest webhookRequest = new TelegramWebhookRequest
@@ -115,7 +115,7 @@ public sealed class TelegramWebhookEndpointTests
     [Fact]
     public async Task PostWebhook_WithCompraCommandAndUnknownCategory_ReturnsCategoryOptions()
     {
-        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(112233);
+        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(998877);
         HttpClient httpClient = financeBotApiFactory.CreateClient();
 
         TelegramWebhookRequest webhookRequest = new TelegramWebhookRequest
@@ -138,7 +138,7 @@ public sealed class TelegramWebhookEndpointTests
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
         SentTelegramMessage sentTelegramMessage = Assert.Single(
             financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
-        Assert.Contains("Categoria inexistente: teste.", sentTelegramMessage.Text);
+        Assert.Contains("Categoria 'teste' inexistente.", sentTelegramMessage.Text);
         Assert.Contains("Categorias disponiveis:", sentTelegramMessage.Text);
         Assert.Contains("Mercado", sentTelegramMessage.Text);
         Assert.DoesNotContain("Uso correto", sentTelegramMessage.Text);
@@ -152,7 +152,7 @@ public sealed class TelegramWebhookEndpointTests
     [Fact]
     public async Task PostWebhook_WithListarCommand_ReturnsMonthExpenses()
     {
-        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(112233);
+        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(998877);
         HttpClient httpClient = financeBotApiFactory.CreateClient();
         DateTime januaryDate = new DateTime(2026, 1, 10, 10, 30, 0, DateTimeKind.Utc);
 
@@ -206,7 +206,7 @@ public sealed class TelegramWebhookEndpointTests
     [Fact]
     public async Task PostWebhook_WithDeletarCommand_RemovesExpenseAndReturnsSummary()
     {
-        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(112233);
+        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(998877);
         HttpClient httpClient = financeBotApiFactory.CreateClient();
         int compraId;
 
@@ -255,19 +255,15 @@ public sealed class TelegramWebhookEndpointTests
     }
 
     [Fact]
-    public async Task PostWebhook_WithMissingChatIdConfig_ReturnsOkWithoutSendingReply()
+    public async Task PostWebhook_WithMissingChatPayload_ReturnsOkWithoutSendingReply()
     {
-        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(0);
+        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(998877);
         HttpClient httpClient = financeBotApiFactory.CreateClient();
 
         TelegramWebhookRequest webhookRequest = new TelegramWebhookRequest
         {
             Message = new TelegramMessageRequest
             {
-                Chat = new TelegramChatRequest
-                {
-                    Id = 998877
-                },
                 Text = "/start"
             }
         };
@@ -280,15 +276,47 @@ public sealed class TelegramWebhookEndpointTests
         Assert.Empty(financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
     }
 
+    [Fact]
+    public async Task PostWebhook_WithUnauthorizedChat_ReturnsOkWithoutSendingReplyOrPersisting()
+    {
+        using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(112233);
+        HttpClient httpClient = financeBotApiFactory.CreateClient();
+
+        TelegramWebhookRequest webhookRequest = new TelegramWebhookRequest
+        {
+            Message = new TelegramMessageRequest
+            {
+                Chat = new TelegramChatRequest
+                {
+                    Id = 998877
+                },
+                Date = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                Text = "/compra 58,90, Almoco da semana, Mercado"
+            }
+        };
+
+        HttpResponseMessage httpResponseMessage = await httpClient.PostAsJsonAsync(
+            "/telegram/webhook",
+            webhookRequest);
+
+        Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
+        Assert.Empty(financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
+
+        using IServiceScope serviceScope = financeBotApiFactory.Services.CreateScope();
+        FinanceBotDbContext financeBotDbContext = serviceScope.ServiceProvider.GetRequiredService<
+            FinanceBotDbContext>();
+        Assert.Empty(financeBotDbContext.Compras.ToList());
+    }
+
     private sealed class FinanceBotApiFactory : WebApplicationFactory<Program>
     {
-        public FinanceBotApiFactory(long chatId)
+        public FinanceBotApiFactory(params long[] allowedChatIds)
         {
-            ChatId = chatId;
+            AllowedChatIds = allowedChatIds;
             DatabaseName = $"FinanceBotTests_{Guid.NewGuid()}";
         }
 
-        private long ChatId { get; }
+        private IReadOnlyList<long> AllowedChatIds { get; }
 
         private string DatabaseName { get; }
 
@@ -300,10 +328,14 @@ public sealed class TelegramWebhookEndpointTests
             Dictionary<string, string?> testConfiguration = new Dictionary<string, string?>
             {
                 ["Telegram:BotToken"] = "test-token",
-                ["Telegram:ChatId"] = ChatId.ToString(),
                 ["ConnectionStrings:DefaultConnection"] =
                     "Host=localhost;Port=5432;Database=fake;Username=fake;Password=fake"
             };
+            for (int index = 0; index < AllowedChatIds.Count; index++)
+            {
+                testConfiguration[$"Telegram:AllowedChatIds:{index}"] =
+                    AllowedChatIds[index].ToString();
+            }
 
             builder.ConfigureAppConfiguration((_, configurationBuilder) =>
             {

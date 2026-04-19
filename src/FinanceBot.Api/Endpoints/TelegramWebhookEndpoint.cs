@@ -38,11 +38,19 @@ public static class TelegramWebhookEndpoint
             return Results.Ok();
         }
 
-        long targetChatId = telegramOptions.Value.ChatId;
-        if (targetChatId == 0)
+        if (update.Message.Chat is null || update.Message.Chat.Id == 0)
         {
             logger.LogWarning(
-                "Telegram chat id is missing. Configure Telegram:ChatId.");
+                "Ignoring message without chat id in payload.");
+            return Results.Ok();
+        }
+
+        long targetChatId = update.Message.Chat.Id;
+        if (!telegramOptions.Value.AllowedChatIds.Contains(targetChatId))
+        {
+            logger.LogWarning(
+                "Ignoring message from unauthorized chat {ChatId}.",
+                targetChatId);
             return Results.Ok();
         }
 
