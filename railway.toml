@@ -1,0 +1,6 @@
+[build]
+buildCommand = "dotnet publish src/FinanceBot.Api/FinanceBot.Api.csproj -c Release -o out"
+
+[deploy]
+startCommand = "dotnet out/FinanceBot.Api.dll"
+healthcheckPath = "/health"
