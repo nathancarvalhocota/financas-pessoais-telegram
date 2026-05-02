@@ -38,7 +38,7 @@ O Telegram é usado como "front-end" (CLI):
 
 ---
 
-## Comandos atuais (MVP)
+## Comandos disponíveis
 
 ### 1) `/compra` – Registrar nova compra
 Registra uma nova despesa do mês com base na data/hora da mensagem.
@@ -122,7 +122,44 @@ Remove uma compra registrada por engano, informando o `id` exibido no `/listar`.
 
 ---
 
-### 4) `/analise` – Análise completa do mês
+### 4) `/limite` – Definir ou consultar limite mensal por categoria
+
+**Definir limite:**
+```
+/limite <CATEGORIA> <VALOR>
+```
+
+**Exemplos:**
+```
+/limite Mercado 800
+/limite Mercado 0   (remove o limite)
+```
+
+**Consultar limite:**
+```
+/limite <CATEGORIA>
+```
+
+**Exemplos:**
+```
+/limite Mercado
+```
+
+**Regras:**
+- `<CATEGORIA>` obrigatória; mesma normalização do `/compra` (ignora acentos e maiúsculas).
+- `<VALOR>` positivo define ou atualiza o limite; valor `0` remove o limite existente.
+- A consulta exibe o gasto acumulado no mês corrente e o percentual em relação ao limite.
+- Ao registrar uma compra via `/compra`, se houver limite definido para a categoria, o bot exibe automaticamente o progresso e alerta caso o limite seja ultrapassado.
+
+**Resposta esperada (definir):**
+- confirmação com o valor definido ou mensagem de remoção.
+
+**Resposta esperada (consultar):**
+- `Mercado: R$ 320,00 de R$ 800,00 (40%)`
+
+---
+
+### 5) `/analise` – Análise completa do mês
 Gera agregações e insights do mês informado como `MM/YY`. Os números são sempre calculados ao vivo a partir das compras — sem cache.
 
 **Formato:**
@@ -146,6 +183,16 @@ Gera agregações e insights do mês informado como `MM/YY`. Os números são se
 - princípio: **números sempre determinísticos**; IA só redige e sugere insights
 - sugestões para o mês seguinte (ex.: "Limite os gastos em lazer para no máximo R$ 200...")
 - **não bloquear o webhook**: operações de IA devem rodar em background e a resposta ser enviada via `sendMessage` assíncrono
+
+---
+
+### 6) `/info` – Exibir ajuda com todos os comandos
+
+```
+/info
+```
+
+Retorna a lista completa de comandos disponíveis com formato e exemplos.
 
 ---
 
@@ -234,6 +281,8 @@ https://api.telegram.org/bot{SEU_TOKEN}/setWebhook?url=https://xxxx.trycloudflar
   listar  - Listar compras do mês (MM/YY → 09/26)
   deletar - Remover uma compra (ID)
   analise - Análise completa dos gastos do mês (MM/YY → 01/27)
+  limite  - Definir ou consultar limite mensal por categoria
+  info    - Exibir todos os comandos disponíveis
   ```
 
 ### Configurar webhook
