@@ -298,6 +298,28 @@ public sealed class TelegramCommandRouterTests
         Assert.Equal("Nenhuma compra em 04/26 (sem Lazer).", response);
     }
 
+    [Fact]
+    public async Task RouteAsync_ListarSemFiltro_MantemCabecalhoEListaTudo()
+    {
+        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        TelegramCommandRouter router = new TelegramCommandRouter(
+            compraRepository,
+            new InMemoryLimiteCategoriaRepository());
+
+        await router.RouteAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
+        await router.RouteAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
+
+        string response = await router.RouteAsync(
+            "/listar 04/26",
+            AbrilDeVinteSeis,
+            CancellationToken.None);
+
+        Assert.Contains("Compras de 04/26:", response);
+        Assert.Contains("Pao", response);
+        Assert.Contains("Cinema", response);
+        Assert.Contains("Total: R$ 150,00", response);
+    }
+
     private sealed class InMemoryCompraRepository : ICompraRepository
     {
         private List<Compra> Compras { get; } = new List<Compra>();
