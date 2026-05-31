@@ -31,6 +31,10 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         "^/limite(?:@[A-Za-z0-9_]+)?\\s+(\\S+)\\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
+    private static readonly Regex MonthYearShapeRegex = new Regex(
+        "^\\d{2}/\\d{2}$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Dictionary<string, Categoria> CategoriasPorTextoNormalizado =
         new Dictionary<string, Categoria>(StringComparer.Ordinal)
         {
@@ -71,6 +75,13 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         "Consulta o limite definido e o gasto atual do mês.\n" +
         "Ex: /limite Mercado\n\n" +
         "Categorias: Educacao, Lazer, Lanches, Uber, Mercado, Moto, Compras, Outros, Estetica, Limpeza, Saude";
+
+    private enum ListarFiltroModo
+    {
+        Nenhum,
+        Inclusao,
+        Exclusao
+    }
 
     private readonly ICompraRepository _compraRepository;
     private readonly ILimiteCategoriaRepository _limiteCategoriaRepository;
@@ -338,17 +349,16 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             return "Uso correto: /listar <MM/YY>. Exemplo: /listar 09/26";
         }
 
-        string monthYearText = commandMatch.Groups[1].Value.Trim();
-        DateTime referenceDate = messageDateUtc.UtcDateTime;
-        if (!string.IsNullOrWhiteSpace(monthYearText))
+        string argsText = commandMatch.Groups[1].Value.Trim();
+        if (!TryParseListarArgs(
+            argsText,
+            messageDateUtc,
+            out DateTime referenceDate,
+            out ListarFiltroModo filtroModo,
+            out List<Categoria> categoriasFiltro,
+            out string parseError))
         {
-            bool parsedMonthYear = TryParseMonthYear(monthYearText, out DateTime parsedReferenceDate);
-            if (!parsedMonthYear)
-            {
-                return "Mes/ano invalido. Use o formato MM/YY, exemplo: 09/26";
-            }
-
-            referenceDate = parsedReferenceDate;
+            return parseError;
         }
 
         DateTime periodStartUtc = new DateTime(
@@ -366,16 +376,22 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             periodEndUtc,
             cancellationToken);
 
-        if (compras.Count == 0)
+        IReadOnlyList<Compra> comprasFiltradas = AplicarFiltro(compras, filtroModo, categoriasFiltro);
+
+        if (comprasFiltradas.Count == 0)
         {
-            return $"Nenhuma compra encontrada para {periodStartUtc:MM/yy}.";
+            return BuildListarVazioMessage(filtroModo, categoriasFiltro, periodStartUtc);
         }
 
+        string headerSuffix = filtroModo == ListarFiltroModo.Nenhum
+            ? string.Empty
+            : $" ({BuildFiltroSuffix(filtroModo, categoriasFiltro)})";
+
         StringBuilder messageBuilder = new StringBuilder();
-        messageBuilder.AppendLine($"Compras de {periodStartUtc:MM/yy}:");
+        messageBuilder.AppendLine($"Compras de {periodStartUtc:MM/yy}{headerSuffix}:");
 
         double totalMonthValue = 0;
-        foreach (Compra compra in compras)
+        foreach (Compra compra in comprasFiltradas)
         {
             totalMonthValue += compra.Valor;
             string formattedValue = compra.Valor.ToString("N2", PtBrCulture);
@@ -388,6 +404,113 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         string formattedTotalMonthValue = totalMonthValue.ToString("N2", PtBrCulture);
         messageBuilder.Append($"\nTotal: R$ {formattedTotalMonthValue}");
         return messageBuilder.ToString();
+    }
+
+    private static bool TryParseListarArgs(
+        string argsText,
+        DateTimeOffset messageDateUtc,
+        out DateTime referenceDateUtc,
+        out ListarFiltroModo filtroModo,
+        out List<Categoria> categoriasFiltro,
+        out string errorMessage)
+    {
+        referenceDateUtc = messageDateUtc.UtcDateTime;
+        filtroModo = ListarFiltroModo.Nenhum;
+        categoriasFiltro = new List<Categoria>();
+        errorMessage = string.Empty;
+
+        string filterText = argsText;
+        int firstSpaceIndex = argsText.IndexOf(' ');
+        string firstToken = firstSpaceIndex < 0 ? argsText : argsText.Substring(0, firstSpaceIndex);
+
+        if (MonthYearShapeRegex.IsMatch(firstToken))
+        {
+            if (!TryParseMonthYear(firstToken, out referenceDateUtc))
+            {
+                errorMessage = "Mes/ano invalido. Use o formato MM/YY, exemplo: 09/26";
+                return false;
+            }
+
+            filterText = firstSpaceIndex < 0 ? string.Empty : argsText.Substring(firstSpaceIndex + 1).Trim();
+        }
+
+        if (filterText.Length == 0)
+        {
+            return true;
+        }
+
+        return TryParseFiltroCategorias(filterText, out filtroModo, out categoriasFiltro, out errorMessage);
+    }
+
+    private static bool TryParseFiltroCategorias(
+        string filterText,
+        out ListarFiltroModo filtroModo,
+        out List<Categoria> categoriasFiltro,
+        out string errorMessage)
+    {
+        filtroModo = ListarFiltroModo.Inclusao;
+        return TryParseCategoriaList(filterText, out categoriasFiltro, out errorMessage);
+    }
+
+    private static bool TryParseCategoriaList(
+        string categoriasText,
+        out List<Categoria> categoriasFiltro,
+        out string errorMessage)
+    {
+        categoriasFiltro = new List<Categoria>();
+        errorMessage = string.Empty;
+
+        foreach (string rawCategoria in categoriasText.Split(','))
+        {
+            string categoriaText = rawCategoria.Trim();
+            if (!TryParseCategoria(categoriaText, out Categoria categoria))
+            {
+                errorMessage = $"Categoria '{categoriaText}' inexistente.\n\nCategorias disponiveis:\n" +
+                    BuildCategoriasValidas();
+                return false;
+            }
+
+            categoriasFiltro.Add(categoria);
+        }
+
+        return true;
+    }
+
+    private static IReadOnlyList<Compra> AplicarFiltro(
+        IReadOnlyList<Compra> compras,
+        ListarFiltroModo filtroModo,
+        List<Categoria> categoriasFiltro)
+    {
+        if (filtroModo == ListarFiltroModo.Nenhum)
+        {
+            return compras;
+        }
+
+        HashSet<Categoria> categoriaSet = new HashSet<Categoria>(categoriasFiltro);
+        return compras
+            .Where(compra => categoriaSet.Contains(compra.Categoria))
+            .ToList();
+    }
+
+    private static string BuildFiltroSuffix(
+        ListarFiltroModo filtroModo,
+        List<Categoria> categoriasFiltro)
+    {
+        string nomes = string.Join(", ", categoriasFiltro.Select(GetCategoriaDisplayName));
+        return filtroModo == ListarFiltroModo.Exclusao ? $"sem {nomes}" : nomes;
+    }
+
+    private static string BuildListarVazioMessage(
+        ListarFiltroModo filtroModo,
+        List<Categoria> categoriasFiltro,
+        DateTime periodStartUtc)
+    {
+        if (filtroModo == ListarFiltroModo.Inclusao)
+        {
+            return $"Nenhuma compra de {BuildFiltroSuffix(filtroModo, categoriasFiltro)} em {periodStartUtc:MM/yy}.";
+        }
+
+        return $"Nenhuma compra encontrada para {periodStartUtc:MM/yy}.";
     }
 
     private async Task<string> HandleDeletarAsync(
