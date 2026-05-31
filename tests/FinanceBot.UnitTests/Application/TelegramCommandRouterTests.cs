@@ -244,6 +244,60 @@ public sealed class TelegramCommandRouterTests
         Assert.Equal("Nenhuma compra de Lazer em 04/26.", response);
     }
 
+    [Fact]
+    public async Task RouteAsync_ListarExclusao_OmiteCategoriasInformadas()
+    {
+        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        TelegramCommandRouter router = new TelegramCommandRouter(
+            compraRepository,
+            new InMemoryLimiteCategoriaRepository());
+
+        await router.RouteAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
+        await router.RouteAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
+
+        string response = await router.RouteAsync(
+            "/listar 04/26 sem Lazer",
+            AbrilDeVinteSeis,
+            CancellationToken.None);
+
+        Assert.Contains("Compras de 04/26 (sem Lazer):", response);
+        Assert.Contains("Pao", response);
+        Assert.DoesNotContain("Cinema", response);
+    }
+
+    [Fact]
+    public async Task RouteAsync_ListarSemSemCategoria_RetornaErro()
+    {
+        TelegramCommandRouter router = new TelegramCommandRouter(
+            new InMemoryCompraRepository(),
+            new InMemoryLimiteCategoriaRepository());
+
+        string response = await router.RouteAsync(
+            "/listar 04/26 sem",
+            AbrilDeVinteSeis,
+            CancellationToken.None);
+
+        Assert.Contains("Informe ao menos uma categoria após 'sem'", response);
+    }
+
+    [Fact]
+    public async Task RouteAsync_ListarExclusaoSemResultado_RetornaMensagemFiltrada()
+    {
+        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        TelegramCommandRouter router = new TelegramCommandRouter(
+            compraRepository,
+            new InMemoryLimiteCategoriaRepository());
+
+        await router.RouteAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
+
+        string response = await router.RouteAsync(
+            "/listar 04/26 sem Lazer",
+            AbrilDeVinteSeis,
+            CancellationToken.None);
+
+        Assert.Equal("Nenhuma compra em 04/26 (sem Lazer).", response);
+    }
+
     private sealed class InMemoryCompraRepository : ICompraRepository
     {
         private List<Compra> Compras { get; } = new List<Compra>();

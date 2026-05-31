@@ -449,7 +449,25 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         out string errorMessage)
     {
         filtroModo = ListarFiltroModo.Inclusao;
-        return TryParseCategoriaList(filterText, out categoriasFiltro, out errorMessage);
+        categoriasFiltro = new List<Categoria>();
+        errorMessage = string.Empty;
+
+        string categoriasText = filterText;
+        int firstSpaceIndex = filterText.IndexOf(' ');
+        string firstToken = firstSpaceIndex < 0 ? filterText : filterText.Substring(0, firstSpaceIndex);
+
+        if (NormalizeText(firstToken) == "sem")
+        {
+            filtroModo = ListarFiltroModo.Exclusao;
+            categoriasText = firstSpaceIndex < 0 ? string.Empty : filterText.Substring(firstSpaceIndex + 1).Trim();
+            if (categoriasText.Length == 0)
+            {
+                errorMessage = "Informe ao menos uma categoria após 'sem'. Exemplo: /listar sem Mercado";
+                return false;
+            }
+        }
+
+        return TryParseCategoriaList(categoriasText, out categoriasFiltro, out errorMessage);
     }
 
     private static bool TryParseCategoriaList(
@@ -487,8 +505,9 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         }
 
         HashSet<Categoria> categoriaSet = new HashSet<Categoria>(categoriasFiltro);
+        bool manterQuandoPresente = filtroModo == ListarFiltroModo.Inclusao;
         return compras
-            .Where(compra => categoriaSet.Contains(compra.Categoria))
+            .Where(compra => categoriaSet.Contains(compra.Categoria) == manterQuandoPresente)
             .ToList();
     }
 
@@ -508,6 +527,11 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         if (filtroModo == ListarFiltroModo.Inclusao)
         {
             return $"Nenhuma compra de {BuildFiltroSuffix(filtroModo, categoriasFiltro)} em {periodStartUtc:MM/yy}.";
+        }
+
+        if (filtroModo == ListarFiltroModo.Exclusao)
+        {
+            return $"Nenhuma compra em {periodStartUtc:MM/yy} ({BuildFiltroSuffix(filtroModo, categoriasFiltro)}).";
         }
 
         return $"Nenhuma compra encontrada para {periodStartUtc:MM/yy}.";
