@@ -15,7 +15,10 @@ WebApplication app = builder.Build();
 using (IServiceScope scope = app.Services.CreateScope())
 {
     FinanceBotDbContext db = scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>();
-    await db.Database.MigrateAsync();
+    if (db.Database.IsRelational())
+    {
+        await db.Database.MigrateAsync();
+    }
 }
 
 app.MapGet("/health", static () => Results.Ok("ok"));
