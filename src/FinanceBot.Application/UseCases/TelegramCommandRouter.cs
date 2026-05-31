@@ -56,10 +56,13 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         "/compra <VALOR>, <DESCRICAO>, <CATEGORIA>\n" +
         "Registra uma despesa. Valor aceita virgula ou ponto.\n" +
         "Ex: /compra 58,90, Almoço, Mercado\n\n" +
-        "/listar <MM/AA>\n" +
+        "/listar <MM/AA> [<CATEGORIAS>] | [sem <CATEGORIAS>]\n" +
         "Lista as compras do mês com ID, data, valor e categoria.\n" +
         "Omita o mês para listar o mês atual.\n" +
-        "Ex: /listar 04/26\n\n" +
+        "Filtre por categoria, ou use 'sem' para excluir categorias.\n" +
+        "Ex: /listar 04/26\n" +
+        "Ex: /listar 04/26 Mercado, Uber\n" +
+        "Ex: /listar 04/26 sem Lazer\n\n" +
         "/deletar <ID>\n" +
         "Remove uma compra pelo ID exibido no /listar.\n" +
         "Ex: /deletar 42\n\n" +

@@ -299,6 +299,22 @@ public sealed class TelegramCommandRouterTests
     }
 
     [Fact]
+    public async Task RouteAsync_Info_DocumentaFiltroDoListar()
+    {
+        TelegramCommandRouter router = new TelegramCommandRouter(
+            new InMemoryCompraRepository(),
+            new InMemoryLimiteCategoriaRepository());
+
+        string response = await router.RouteAsync(
+            "/info",
+            AbrilDeVinteSeis,
+            CancellationToken.None);
+
+        Assert.Contains("/listar 04/26 Mercado, Uber", response);
+        Assert.Contains("sem Lazer", response);
+    }
+
+    [Fact]
     public async Task RouteAsync_ListarSemFiltro_MantemCabecalhoEListaTudo()
     {
         InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
