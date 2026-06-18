@@ -197,7 +197,7 @@ public sealed class TelegramWebhookEndpointTests
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
         SentTelegramMessage sentTelegramMessage = Assert.Single(
             financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
-        Assert.Contains("Compras de 15/01 a 15/02", sentTelegramMessage.Text);
+        Assert.Contains("Compras de 15/01 a 14/02", sentTelegramMessage.Text);
         Assert.Contains("Almoco", sentTelegramMessage.Text);
         Assert.Contains("Lanche", sentTelegramMessage.Text);
         Assert.Contains("Total: R$ 78,90", sentTelegramMessage.Text);

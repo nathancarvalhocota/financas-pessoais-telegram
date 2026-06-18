@@ -185,7 +185,7 @@ public sealed class TelegramCommandRouterTests
             AbrilDeVinteSeis,
             CancellationToken.None);
 
-        Assert.Contains("Compras de 15/04 a 15/05 (Mercado):", response);
+        Assert.Contains("Compras de 15/04 a 14/05 (Mercado):", response);
         Assert.Contains("Pao", response);
         Assert.DoesNotContain("Cinema", response);
     }
@@ -241,7 +241,7 @@ public sealed class TelegramCommandRouterTests
             AbrilDeVinteSeis,
             CancellationToken.None);
 
-        Assert.Equal("Nenhuma compra de Lazer de 15/04 a 15/05.", response);
+        Assert.Equal("Nenhuma compra de Lazer de 15/04 a 14/05.", response);
     }
 
     [Fact]
@@ -260,7 +260,7 @@ public sealed class TelegramCommandRouterTests
             AbrilDeVinteSeis,
             CancellationToken.None);
 
-        Assert.Contains("Compras de 15/04 a 15/05 (sem Lazer):", response);
+        Assert.Contains("Compras de 15/04 a 14/05 (sem Lazer):", response);
         Assert.Contains("Pao", response);
         Assert.DoesNotContain("Cinema", response);
     }
@@ -295,7 +295,7 @@ public sealed class TelegramCommandRouterTests
             AbrilDeVinteSeis,
             CancellationToken.None);
 
-        Assert.Equal("Nenhuma compra de 15/04 a 15/05 (sem Lazer).", response);
+        Assert.Equal("Nenhuma compra de 15/04 a 14/05 (sem Lazer).", response);
     }
 
     [Fact]
@@ -330,7 +330,7 @@ public sealed class TelegramCommandRouterTests
             AbrilDeVinteSeis,
             CancellationToken.None);
 
-        Assert.Contains("Compras de 15/04 a 15/05:", response);
+        Assert.Contains("Compras de 15/04 a 14/05:", response);
         Assert.Contains("Pao", response);
         Assert.Contains("Cinema", response);
         Assert.Contains("Total: R$ 150,00", response);

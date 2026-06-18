@@ -203,7 +203,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
 
         IReadOnlyList<Compra> comprasDoMes = await _compraRepository.ListByPeriodAsync(
             periodStartUtc,
-            periodEndUtc,
+            periodEndUtc.AddDays(1),
             cancellationToken);
 
         double gastoAcumulado = 0;
@@ -317,7 +317,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         var (periodStartUtc, periodEndUtc) = GetBillingPeriod(DateTime.UtcNow);
 
         IReadOnlyList<Compra> comprasDoMes = await _compraRepository.ListByPeriodAsync(
-            periodStartUtc, periodEndUtc, cancellationToken);
+            periodStartUtc, periodEndUtc.AddDays(1), cancellationToken);
 
         double totalGasto = comprasDoMes
             .Where(c => c.Categoria == categoria)
@@ -358,7 +358,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
 
         IReadOnlyList<Compra> compras = await _compraRepository.ListByPeriodAsync(
             periodStartUtc,
-            periodEndUtc,
+            periodEndUtc.AddDays(1),
             cancellationToken);
 
         IReadOnlyList<Compra> comprasFiltradas = ApplyFilter(compras, filtroModo, categoriasFiltro);
@@ -642,7 +642,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         }
 
         DateTime start = new DateTime(year, month, 15, 0, 0, 0, DateTimeKind.Utc);
-        DateTime end = start.AddMonths(1);
+        DateTime end = start.AddMonths(1).AddDays(-1);
         return (start, end);
     }
 }
