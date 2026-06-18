@@ -5,7 +5,7 @@ namespace FinanceBot.Application.Abstractions;
 
 public interface ILimiteCategoriaRepository
 {
-    Task<LimiteCategoria?> GetByCategoriaAsync(Categoria categoria, CancellationToken cancellationToken);
+    Task<LimiteCategoria?> GetByCategoryAsync(Categoria categoria, CancellationToken cancellationToken);
 
     Task UpsertAsync(LimiteCategoria limiteCategoria, CancellationToken cancellationToken);
 

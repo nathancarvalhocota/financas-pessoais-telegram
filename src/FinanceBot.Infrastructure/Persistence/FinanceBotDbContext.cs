@@ -18,11 +18,11 @@ public sealed class FinanceBotDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        ConfigureCompra(modelBuilder.Entity<Compra>());
-        ConfigureLimiteCategoria(modelBuilder.Entity<LimiteCategoria>());
+        ConfigurePurchase(modelBuilder.Entity<Compra>());
+        ConfigureCategoryLimit(modelBuilder.Entity<LimiteCategoria>());
     }
 
-    private static void ConfigureCompra(EntityTypeBuilder<Compra> compraConfiguration)
+    private static void ConfigurePurchase(EntityTypeBuilder<Compra> compraConfiguration)
     {
         compraConfiguration.ToTable("compras");
         compraConfiguration.HasKey(compra => compra.Id);
@@ -50,7 +50,7 @@ public sealed class FinanceBotDbContext : DbContext
             .IsRequired();
     }
 
-    private static void ConfigureLimiteCategoria(EntityTypeBuilder<LimiteCategoria> cfg)
+    private static void ConfigureCategoryLimit(EntityTypeBuilder<LimiteCategoria> cfg)
     {
         cfg.ToTable("limite_categorias");
         cfg.HasKey(l => l.Id);

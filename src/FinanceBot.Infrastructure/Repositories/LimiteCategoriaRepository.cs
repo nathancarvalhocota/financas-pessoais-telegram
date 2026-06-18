@@ -15,7 +15,7 @@ public sealed class LimiteCategoriaRepository : ILimiteCategoriaRepository
         _financeBotDbContext = financeBotDbContext;
     }
 
-    public async Task<LimiteCategoria?> GetByCategoriaAsync(
+    public async Task<LimiteCategoria?> GetByCategoryAsync(
         Categoria categoria,
         CancellationToken cancellationToken)
     {

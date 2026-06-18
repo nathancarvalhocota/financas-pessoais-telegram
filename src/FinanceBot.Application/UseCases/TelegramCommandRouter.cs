@@ -105,22 +105,22 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         string normalizedMessageText = messageText.Trim();
         if (normalizedMessageText.StartsWith("/compra", StringComparison.OrdinalIgnoreCase))
         {
-            return await HandleCompraAsync(normalizedMessageText, messageDateUtc, cancellationToken);
+            return await HandlePurchaseAsync(normalizedMessageText, messageDateUtc, cancellationToken);
         }
 
         if (normalizedMessageText.StartsWith("/listar", StringComparison.OrdinalIgnoreCase))
         {
-            return await HandleListarAsync(normalizedMessageText, messageDateUtc, cancellationToken);
+            return await HandleListAsync(normalizedMessageText, messageDateUtc, cancellationToken);
         }
 
         if (normalizedMessageText.StartsWith("/deletar", StringComparison.OrdinalIgnoreCase))
         {
-            return await HandleDeletarAsync(normalizedMessageText, cancellationToken);
+            return await HandleDeleteAsync(normalizedMessageText, cancellationToken);
         }
 
         if (normalizedMessageText.StartsWith("/limite", StringComparison.OrdinalIgnoreCase))
         {
-            return await HandleLimiteAsync(normalizedMessageText, cancellationToken);
+            return await HandleLimitAsync(normalizedMessageText, cancellationToken);
         }
 
         if (normalizedMessageText.StartsWith("/start", StringComparison.OrdinalIgnoreCase))
@@ -136,7 +136,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         return "Comando nao reconhecido. Use /info para ver os comandos disponíveis.";
     }
 
-    private async Task<string> HandleCompraAsync(
+    private async Task<string> HandlePurchaseAsync(
         string messageText,
         DateTimeOffset messageDateUtc,
         CancellationToken cancellationToken)
@@ -169,11 +169,11 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             return "Descricao obrigatoria no comando /compra.";
         }
 
-        bool categoriaReconhecida = TryParseCategoria(categoriaText, out Categoria categoria);
+        bool categoriaReconhecida = TryParseCategory(categoriaText, out Categoria categoria);
         if (!categoriaReconhecida)
         {
             return $"Categoria '{categoriaText}' inexistente.\n\nCategorias disponiveis:\n" +
-                BuildCategoriasValidas();
+                BuildValidCategories();
         }
 
         DateTime compraDateUtc = messageDateUtc.UtcDateTime;
@@ -188,26 +188,18 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         await _compraRepository.AddAsync(compra, cancellationToken);
 
         string formattedValor = valor.ToString("N2", PtBrCulture);
-        string categoriaDisplayName = GetCategoriaDisplayName(categoria);
+        string categoriaDisplayName = GetCategoryDisplayName(categoria);
         string baseResponse = $"Compra registrada: R$ {formattedValor} - {categoriaDisplayName}";
 
         LimiteCategoria? limite = await _limiteCategoriaRepository
-            .GetByCategoriaAsync(categoria, cancellationToken);
+            .GetByCategoryAsync(categoria, cancellationToken);
 
         if (limite is null)
         {
             return baseResponse;
         }
 
-        DateTime periodStartUtc = new DateTime(
-            compraDateUtc.Year,
-            compraDateUtc.Month,
-            1,
-            0,
-            0,
-            0,
-            DateTimeKind.Utc);
-        DateTime periodEndUtc = periodStartUtc.AddMonths(1);
+        var (periodStartUtc, periodEndUtc) = GetBillingPeriod(compraDateUtc);
 
         IReadOnlyList<Compra> comprasDoMes = await _compraRepository.ListByPeriodAsync(
             periodStartUtc,
@@ -235,14 +227,14 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         return $"{baseResponse}\n{categoriaDisplayName}: R$ {formattedGasto} de R$ {formattedLimite} ({percentual}%)";
     }
 
-    private async Task<string> HandleLimiteAsync(
+    private async Task<string> HandleLimitAsync(
         string messageText,
         CancellationToken cancellationToken)
     {
         Match consultaMatch = LimiteConsultaCommandRegex.Match(messageText);
         if (consultaMatch.Success && !LimiteCommandRegex.IsMatch(messageText))
         {
-            return await HandleLimiteConsultaAsync(consultaMatch, cancellationToken);
+            return await HandleLimitQueryAsync(consultaMatch, cancellationToken);
         }
 
         Match commandMatch = LimiteCommandRegex.Match(messageText);
@@ -255,11 +247,11 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         string categoriaText = commandMatch.Groups[1].Value.Trim();
         string valorText = commandMatch.Groups[2].Value;
 
-        bool categoriaReconhecida = TryParseCategoria(categoriaText, out Categoria categoria);
+        bool categoriaReconhecida = TryParseCategory(categoriaText, out Categoria categoria);
         if (!categoriaReconhecida)
         {
             return $"Categoria '{categoriaText}' inexistente.\n\nCategorias disponiveis:\n" +
-                BuildCategoriasValidas();
+                BuildValidCategories();
         }
 
         string normalizedValorText = valorText.Replace(',', '.');
@@ -274,12 +266,12 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             return "Valor invalido. Use um numero positivo ou 0 para remover o limite.";
         }
 
-        string categoriaDisplayName = GetCategoriaDisplayName(categoria);
+        string categoriaDisplayName = GetCategoryDisplayName(categoria);
 
         if (valor == 0)
         {
             LimiteCategoria? existing = await _limiteCategoriaRepository
-                .GetByCategoriaAsync(categoria, cancellationToken);
+                .GetByCategoryAsync(categoria, cancellationToken);
 
             if (existing is not null)
             {
@@ -301,30 +293,28 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         return $"Limite de {categoriaDisplayName} definido: R$ {formattedValor}";
     }
 
-    private async Task<string> HandleLimiteConsultaAsync(
+    private async Task<string> HandleLimitQueryAsync(
         Match consultaMatch,
         CancellationToken cancellationToken)
     {
         string categoriaText = consultaMatch.Groups[1].Value.Trim();
-        bool categoriaReconhecida = TryParseCategoria(categoriaText, out Categoria categoria);
+        bool categoriaReconhecida = TryParseCategory(categoriaText, out Categoria categoria);
         if (!categoriaReconhecida)
         {
             return $"Categoria '{categoriaText}' inexistente.\n\nCategorias disponiveis:\n" +
-                BuildCategoriasValidas();
+                BuildValidCategories();
         }
 
-        string categoriaDisplayName = GetCategoriaDisplayName(categoria);
+        string categoriaDisplayName = GetCategoryDisplayName(categoria);
         LimiteCategoria? limite = await _limiteCategoriaRepository
-            .GetByCategoriaAsync(categoria, cancellationToken);
+            .GetByCategoryAsync(categoria, cancellationToken);
 
         if (limite is null)
         {
             return $"Nenhum limite definido para {categoriaDisplayName}.";
         }
 
-        DateTime now = DateTime.UtcNow;
-        DateTime periodStartUtc = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-        DateTime periodEndUtc = periodStartUtc.AddMonths(1);
+        var (periodStartUtc, periodEndUtc) = GetBillingPeriod(DateTime.UtcNow);
 
         IReadOnlyList<Compra> comprasDoMes = await _compraRepository.ListByPeriodAsync(
             periodStartUtc, periodEndUtc, cancellationToken);
@@ -341,7 +331,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         return $"{categoriaDisplayName}: R$ {formattedGasto} de R$ {formattedLimite} ({formattedPercentual}%)";
     }
 
-    private async Task<string> HandleListarAsync(
+    private async Task<string> HandleListAsync(
         string messageText,
         DateTimeOffset messageDateUtc,
         CancellationToken cancellationToken)
@@ -353,7 +343,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         }
 
         string argsText = commandMatch.Groups[1].Value.Trim();
-        if (!TryParseListarArgs(
+        if (!TryParseListArgs(
             argsText,
             messageDateUtc,
             out DateTime referenceDate,
@@ -364,41 +354,33 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             return parseError;
         }
 
-        DateTime periodStartUtc = new DateTime(
-            referenceDate.Year,
-            referenceDate.Month,
-            1,
-            0,
-            0,
-            0,
-            DateTimeKind.Utc);
-        DateTime periodEndUtc = periodStartUtc.AddMonths(1);
+        var (periodStartUtc, periodEndUtc) = GetBillingPeriod(referenceDate);
 
         IReadOnlyList<Compra> compras = await _compraRepository.ListByPeriodAsync(
             periodStartUtc,
             periodEndUtc,
             cancellationToken);
 
-        IReadOnlyList<Compra> comprasFiltradas = AplicarFiltro(compras, filtroModo, categoriasFiltro);
+        IReadOnlyList<Compra> comprasFiltradas = ApplyFilter(compras, filtroModo, categoriasFiltro);
 
         if (comprasFiltradas.Count == 0)
         {
-            return BuildListarVazioMessage(filtroModo, categoriasFiltro, periodStartUtc);
+            return BuildEmptyListMessage(filtroModo, categoriasFiltro, periodStartUtc, periodEndUtc);
         }
 
         string headerSuffix = filtroModo == ListarFiltroModo.Nenhum
             ? string.Empty
-            : $" ({BuildFiltroSuffix(filtroModo, categoriasFiltro)})";
+            : $" ({BuildFilterSuffix(filtroModo, categoriasFiltro)})";
 
         StringBuilder messageBuilder = new StringBuilder();
-        messageBuilder.AppendLine($"Compras de {periodStartUtc:MM/yy}{headerSuffix}:");
+        messageBuilder.AppendLine($"Compras de {periodStartUtc:dd/MM} a {periodEndUtc:dd/MM}{headerSuffix}:");
 
         double totalMonthValue = 0;
         foreach (Compra compra in comprasFiltradas)
         {
             totalMonthValue += compra.Valor;
             string formattedValue = compra.Valor.ToString("N2", PtBrCulture);
-            string categoriaDisplayName = GetCategoriaDisplayName(compra.Categoria);
+            string categoriaDisplayName = GetCategoryDisplayName(compra.Categoria);
             messageBuilder.AppendLine();
             messageBuilder.AppendLine($"[{compra.Id}] {categoriaDisplayName} — R$ {formattedValue}");
             messageBuilder.AppendLine($"    {compra.Descricao} · {compra.Data:dd/MM HH:mm}");
@@ -409,7 +391,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         return messageBuilder.ToString();
     }
 
-    private static bool TryParseListarArgs(
+    private static bool TryParseListArgs(
         string argsText,
         DateTimeOffset messageDateUtc,
         out DateTime referenceDateUtc,
@@ -442,10 +424,10 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             return true;
         }
 
-        return TryParseFiltroCategorias(filterText, out filtroModo, out categoriasFiltro, out errorMessage);
+        return TryParseCategoryFilter(filterText, out filtroModo, out categoriasFiltro, out errorMessage);
     }
 
-    private static bool TryParseFiltroCategorias(
+    private static bool TryParseCategoryFilter(
         string filterText,
         out ListarFiltroModo filtroModo,
         out List<Categoria> categoriasFiltro,
@@ -470,10 +452,10 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             }
         }
 
-        return TryParseCategoriaList(categoriasText, out categoriasFiltro, out errorMessage);
+        return TryParseCategoryList(categoriasText, out categoriasFiltro, out errorMessage);
     }
 
-    private static bool TryParseCategoriaList(
+    private static bool TryParseCategoryList(
         string categoriasText,
         out List<Categoria> categoriasFiltro,
         out string errorMessage)
@@ -484,10 +466,10 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         foreach (string rawCategoria in categoriasText.Split(','))
         {
             string categoriaText = rawCategoria.Trim();
-            if (!TryParseCategoria(categoriaText, out Categoria categoria))
+            if (!TryParseCategory(categoriaText, out Categoria categoria))
             {
                 errorMessage = $"Categoria '{categoriaText}' inexistente.\n\nCategorias disponiveis:\n" +
-                    BuildCategoriasValidas();
+                    BuildValidCategories();
                 return false;
             }
 
@@ -497,7 +479,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         return true;
     }
 
-    private static IReadOnlyList<Compra> AplicarFiltro(
+    private static IReadOnlyList<Compra> ApplyFilter(
         IReadOnlyList<Compra> compras,
         ListarFiltroModo filtroModo,
         List<Categoria> categoriasFiltro)
@@ -514,33 +496,36 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             .ToList();
     }
 
-    private static string BuildFiltroSuffix(
+    private static string BuildFilterSuffix(
         ListarFiltroModo filtroModo,
         List<Categoria> categoriasFiltro)
     {
-        string nomes = string.Join(", ", categoriasFiltro.Select(GetCategoriaDisplayName));
+        string nomes = string.Join(", ", categoriasFiltro.Select(GetCategoryDisplayName));
         return filtroModo == ListarFiltroModo.Exclusao ? $"sem {nomes}" : nomes;
     }
 
-    private static string BuildListarVazioMessage(
+    private static string BuildEmptyListMessage(
         ListarFiltroModo filtroModo,
         List<Categoria> categoriasFiltro,
-        DateTime periodStartUtc)
+        DateTime periodStartUtc,
+        DateTime periodEndUtc)
     {
+        string periodRange = $"{periodStartUtc:dd/MM} a {periodEndUtc:dd/MM}";
+
         if (filtroModo == ListarFiltroModo.Inclusao)
         {
-            return $"Nenhuma compra de {BuildFiltroSuffix(filtroModo, categoriasFiltro)} em {periodStartUtc:MM/yy}.";
+            return $"Nenhuma compra de {BuildFilterSuffix(filtroModo, categoriasFiltro)} de {periodRange}.";
         }
 
         if (filtroModo == ListarFiltroModo.Exclusao)
         {
-            return $"Nenhuma compra em {periodStartUtc:MM/yy} ({BuildFiltroSuffix(filtroModo, categoriasFiltro)}).";
+            return $"Nenhuma compra de {periodRange} ({BuildFilterSuffix(filtroModo, categoriasFiltro)}).";
         }
 
-        return $"Nenhuma compra encontrada para {periodStartUtc:MM/yy}.";
+        return $"Nenhuma compra encontrada de {periodRange}.";
     }
 
-    private async Task<string> HandleDeletarAsync(
+    private async Task<string> HandleDeleteAsync(
         string messageText,
         CancellationToken cancellationToken)
     {
@@ -564,7 +549,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
 
         await _compraRepository.DeleteAsync(compra, cancellationToken);
         string formattedValue = compra.Valor.ToString("N2", PtBrCulture);
-        string categoriaDisplayName = GetCategoriaDisplayName(compra.Categoria);
+        string categoriaDisplayName = GetCategoryDisplayName(compra.Categoria);
         return $"Compra removida: R$ {formattedValue} - {compra.Descricao} ({categoriaDisplayName})";
     }
 
@@ -583,11 +568,11 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
 
         int month = int.Parse(monthYearMatch.Groups[1].Value, CultureInfo.InvariantCulture);
         int year = 2000 + int.Parse(monthYearMatch.Groups[2].Value, CultureInfo.InvariantCulture);
-        referenceDateUtc = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
+        referenceDateUtc = new DateTime(year, month, 15, 0, 0, 0, DateTimeKind.Utc);
         return true;
     }
 
-    private static bool TryParseCategoria(string categoriaText, out Categoria categoria)
+    private static bool TryParseCategory(string categoriaText, out Categoria categoria)
     {
         string normalizedCategoryText = NormalizeText(categoriaText);
         return CategoriasPorTextoNormalizado.TryGetValue(normalizedCategoryText, out categoria);
@@ -615,18 +600,18 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         return normalizedBuilder.ToString();
     }
 
-    private static string BuildCategoriasValidas()
+    private static string BuildValidCategories()
     {
         Categoria[] categorias = Enum.GetValues<Categoria>();
         List<string> categoriasValidas = new List<string>(categorias.Length);
         
         foreach (Categoria categoria in categorias)
-            categoriasValidas.Add(GetCategoriaDisplayName(categoria));
+            categoriasValidas.Add(GetCategoryDisplayName(categoria));
         
         return string.Join("\n", categoriasValidas);
     }
 
-    private static string GetCategoriaDisplayName(Categoria categoria)
+    private static string GetCategoryDisplayName(Categoria categoria)
     {
         return categoria switch
         {
@@ -643,5 +628,21 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             Categoria.Saude => "Saude",
             _ => categoria.ToString()
         };
+    }
+
+    private static (DateTime PeriodStartUtc, DateTime PeriodEndUtc) GetBillingPeriod(DateTime dateUtc)
+    {
+        int year = dateUtc.Year;
+        int month = dateUtc.Month;
+
+        if (dateUtc.Day < 15)
+        {
+            month--;
+            if (month == 0) { month = 12; year--; }
+        }
+
+        DateTime start = new DateTime(year, month, 15, 0, 0, 0, DateTimeKind.Utc);
+        DateTime end = start.AddMonths(1);
+        return (start, end);
     }
 }

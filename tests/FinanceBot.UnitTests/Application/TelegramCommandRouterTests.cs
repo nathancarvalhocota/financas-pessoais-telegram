@@ -9,7 +9,7 @@ namespace FinanceBot.UnitTests.Application;
 public sealed class TelegramCommandRouterTests
 {
     [Fact]
-    public async Task RouteAsync_WithCompraAndUnknownCategory_ReturnsCategoryOptionsMessage()
+    public async Task RouteAsync_WithPurchaseAndUnknownCategory_ReturnsCategoryOptionsMessage()
     {
         InMemoryCompraRepository inMemoryCompraRepository = new InMemoryCompraRepository();
         TelegramCommandRouter telegramCommandRouter = new TelegramCommandRouter(
@@ -28,7 +28,7 @@ public sealed class TelegramCommandRouterTests
     }
 
     [Fact]
-    public async Task RouteAsync_WithCompraMentionAndUnknownCategory_ReturnsCategoryOptionsMessage()
+    public async Task RouteAsync_WithPurchaseMentionAndUnknownCategory_ReturnsCategoryOptionsMessage()
     {
         InMemoryCompraRepository inMemoryCompraRepository = new InMemoryCompraRepository();
         TelegramCommandRouter telegramCommandRouter = new TelegramCommandRouter(
@@ -46,7 +46,7 @@ public sealed class TelegramCommandRouterTests
     }
 
     [Fact]
-    public async Task RouteAsync_WithLimiteDefinido_ReturnsConfirmacaoComValor()
+    public async Task RouteAsync_WithLimitDefined_ReturnsConfirmationWithValue()
     {
         InMemoryLimiteCategoriaRepository limiteRepository = new InMemoryLimiteCategoriaRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
@@ -63,7 +63,7 @@ public sealed class TelegramCommandRouterTests
     }
 
     [Fact]
-    public async Task RouteAsync_WithLimiteZero_RemoveLimite()
+    public async Task RouteAsync_WithLimitZero_RemovesLimit()
     {
         InMemoryLimiteCategoriaRepository limiteRepository = new InMemoryLimiteCategoriaRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
@@ -80,14 +80,14 @@ public sealed class TelegramCommandRouterTests
             CancellationToken.None);
 
         Assert.Contains("Limite de Mercado removido", response);
-        LimiteCategoria? limite = await limiteRepository.GetByCategoriaAsync(
+        LimiteCategoria? limite = await limiteRepository.GetByCategoryAsync(
             Categoria.Mercado,
             CancellationToken.None);
         Assert.Null(limite);
     }
 
     [Fact]
-    public async Task RouteAsync_WithLimiteCategoriaInvalida_RetornaErro()
+    public async Task RouteAsync_WithLimitInvalidCategory_ReturnsError()
     {
         TelegramCommandRouter router = new TelegramCommandRouter(
             new InMemoryCompraRepository(),
@@ -103,7 +103,7 @@ public sealed class TelegramCommandRouterTests
     }
 
     [Fact]
-    public async Task RouteAsync_ComCompraELimite_ExibeProgressoNaResposta()
+    public async Task RouteAsync_WithPurchaseAndLimit_ShowsProgressInResponse()
     {
         InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
         InMemoryLimiteCategoriaRepository limiteRepository = new InMemoryLimiteCategoriaRepository();
@@ -124,7 +124,7 @@ public sealed class TelegramCommandRouterTests
     }
 
     [Fact]
-    public async Task RouteAsync_ComCompraQueUltrapassaLimite_ExibeAlerta()
+    public async Task RouteAsync_WithPurchaseExceedingLimit_ShowsAlert()
     {
         InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
         InMemoryLimiteCategoriaRepository limiteRepository = new InMemoryLimiteCategoriaRepository();
@@ -150,7 +150,7 @@ public sealed class TelegramCommandRouterTests
     }
 
     [Fact]
-    public async Task RouteAsync_ComCompraSemLimite_NaoExibeProgresso()
+    public async Task RouteAsync_WithPurchaseWithoutLimit_DoesNotShowProgress()
     {
         TelegramCommandRouter router = new TelegramCommandRouter(
             new InMemoryCompraRepository(),
@@ -170,7 +170,7 @@ public sealed class TelegramCommandRouterTests
         new DateTimeOffset(2026, 4, 15, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task RouteAsync_ListarInclusao_MostraSomenteCategoriasInformadas()
+    public async Task RouteAsync_ListInclusion_ShowsOnlyGivenCategories()
     {
         InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
@@ -185,13 +185,13 @@ public sealed class TelegramCommandRouterTests
             AbrilDeVinteSeis,
             CancellationToken.None);
 
-        Assert.Contains("Compras de 04/26 (Mercado):", response);
+        Assert.Contains("Compras de 15/04 a 15/05 (Mercado):", response);
         Assert.Contains("Pao", response);
         Assert.DoesNotContain("Cinema", response);
     }
 
     [Fact]
-    public async Task RouteAsync_ListarInclusaoSemData_UsaMesAtualEFiltra()
+    public async Task RouteAsync_ListInclusionWithoutDate_UsesCurrentMonthAndFilters()
     {
         InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
@@ -211,7 +211,7 @@ public sealed class TelegramCommandRouterTests
     }
 
     [Fact]
-    public async Task RouteAsync_ListarCategoriaInvalida_RetornaErro()
+    public async Task RouteAsync_ListInvalidCategory_ReturnsError()
     {
         TelegramCommandRouter router = new TelegramCommandRouter(
             new InMemoryCompraRepository(),
@@ -227,7 +227,7 @@ public sealed class TelegramCommandRouterTests
     }
 
     [Fact]
-    public async Task RouteAsync_ListarInclusaoSemResultado_RetornaMensagemFiltrada()
+    public async Task RouteAsync_ListInclusionWithoutResults_ReturnsFilteredMessage()
     {
         InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
@@ -241,11 +241,11 @@ public sealed class TelegramCommandRouterTests
             AbrilDeVinteSeis,
             CancellationToken.None);
 
-        Assert.Equal("Nenhuma compra de Lazer em 04/26.", response);
+        Assert.Equal("Nenhuma compra de Lazer de 15/04 a 15/05.", response);
     }
 
     [Fact]
-    public async Task RouteAsync_ListarExclusao_OmiteCategoriasInformadas()
+    public async Task RouteAsync_ListExclusion_OmitsGivenCategories()
     {
         InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
@@ -260,13 +260,13 @@ public sealed class TelegramCommandRouterTests
             AbrilDeVinteSeis,
             CancellationToken.None);
 
-        Assert.Contains("Compras de 04/26 (sem Lazer):", response);
+        Assert.Contains("Compras de 15/04 a 15/05 (sem Lazer):", response);
         Assert.Contains("Pao", response);
         Assert.DoesNotContain("Cinema", response);
     }
 
     [Fact]
-    public async Task RouteAsync_ListarSemSemCategoria_RetornaErro()
+    public async Task RouteAsync_ListExclusionWithoutCategory_ReturnsError()
     {
         TelegramCommandRouter router = new TelegramCommandRouter(
             new InMemoryCompraRepository(),
@@ -281,7 +281,7 @@ public sealed class TelegramCommandRouterTests
     }
 
     [Fact]
-    public async Task RouteAsync_ListarExclusaoSemResultado_RetornaMensagemFiltrada()
+    public async Task RouteAsync_ListExclusionWithoutResults_ReturnsFilteredMessage()
     {
         InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
@@ -295,11 +295,11 @@ public sealed class TelegramCommandRouterTests
             AbrilDeVinteSeis,
             CancellationToken.None);
 
-        Assert.Equal("Nenhuma compra em 04/26 (sem Lazer).", response);
+        Assert.Equal("Nenhuma compra de 15/04 a 15/05 (sem Lazer).", response);
     }
 
     [Fact]
-    public async Task RouteAsync_Info_DocumentaFiltroDoListar()
+    public async Task RouteAsync_Info_DocumentsListFilter()
     {
         TelegramCommandRouter router = new TelegramCommandRouter(
             new InMemoryCompraRepository(),
@@ -315,7 +315,7 @@ public sealed class TelegramCommandRouterTests
     }
 
     [Fact]
-    public async Task RouteAsync_ListarSemFiltro_MantemCabecalhoEListaTudo()
+    public async Task RouteAsync_ListWithoutFilter_KeepsHeaderAndListsAll()
     {
         InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
@@ -330,7 +330,7 @@ public sealed class TelegramCommandRouterTests
             AbrilDeVinteSeis,
             CancellationToken.None);
 
-        Assert.Contains("Compras de 04/26:", response);
+        Assert.Contains("Compras de 15/04 a 15/05:", response);
         Assert.Contains("Pao", response);
         Assert.Contains("Cinema", response);
         Assert.Contains("Total: R$ 150,00", response);
@@ -373,7 +373,7 @@ public sealed class TelegramCommandRouterTests
         private readonly List<LimiteCategoria> _limites = new List<LimiteCategoria>();
         private int _nextId = 1;
 
-        public Task<LimiteCategoria?> GetByCategoriaAsync(
+        public Task<LimiteCategoria?> GetByCategoryAsync(
             Categoria categoria,
             CancellationToken cancellationToken)
         {

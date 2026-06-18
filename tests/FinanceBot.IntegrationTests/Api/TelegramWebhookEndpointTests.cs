@@ -75,7 +75,7 @@ public sealed class TelegramWebhookEndpointTests
     }
 
     [Fact]
-    public async Task PostWebhook_WithCompraCommand_PersistsExpenseAndSendsConfirmation()
+    public async Task PostWebhook_WithPurchaseCommand_PersistsExpenseAndSendsConfirmation()
     {
         using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(998877);
         HttpClient httpClient = financeBotApiFactory.CreateClient();
@@ -113,7 +113,7 @@ public sealed class TelegramWebhookEndpointTests
     }
 
     [Fact]
-    public async Task PostWebhook_WithCompraCommandAndUnknownCategory_ReturnsCategoryOptions()
+    public async Task PostWebhook_WithPurchaseCommandAndUnknownCategory_ReturnsCategoryOptions()
     {
         using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(998877);
         HttpClient httpClient = financeBotApiFactory.CreateClient();
@@ -150,11 +150,11 @@ public sealed class TelegramWebhookEndpointTests
     }
 
     [Fact]
-    public async Task PostWebhook_WithListarCommand_ReturnsMonthExpenses()
+    public async Task PostWebhook_WithListCommand_ReturnsMonthExpenses()
     {
         using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(998877);
         HttpClient httpClient = financeBotApiFactory.CreateClient();
-        DateTime januaryDate = new DateTime(2026, 1, 10, 10, 30, 0, DateTimeKind.Utc);
+        DateTime januaryDate = new DateTime(2026, 1, 20, 10, 30, 0, DateTimeKind.Utc);
 
         using (IServiceScope serviceScope = financeBotApiFactory.Services.CreateScope())
         {
@@ -197,14 +197,14 @@ public sealed class TelegramWebhookEndpointTests
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
         SentTelegramMessage sentTelegramMessage = Assert.Single(
             financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
-        Assert.Contains("Compras de 01/26", sentTelegramMessage.Text);
+        Assert.Contains("Compras de 15/01 a 15/02", sentTelegramMessage.Text);
         Assert.Contains("Almoco", sentTelegramMessage.Text);
         Assert.Contains("Lanche", sentTelegramMessage.Text);
         Assert.Contains("Total: R$ 78,90", sentTelegramMessage.Text);
     }
 
     [Fact]
-    public async Task PostWebhook_WithDeletarCommand_RemovesExpenseAndReturnsSummary()
+    public async Task PostWebhook_WithDeleteCommand_RemovesExpenseAndReturnsSummary()
     {
         using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(998877);
         HttpClient httpClient = financeBotApiFactory.CreateClient();
