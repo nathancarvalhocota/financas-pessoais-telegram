@@ -19,6 +19,10 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         "^/listar(?:\\s+(.+))?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
+    private static readonly Regex DateRangeRegex = new Regex(
+        "^(?<start>\\d{2}/\\d{2}/(?:\\d{2}|\\d{4}))\\s*-\\s*(?<end>\\d{2}/\\d{2}/(?:\\d{2}|\\d{4}))(?:\\s+(?<filter>.+))?$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex DeletarCommandRegex = new Regex(
         "^/deletar\\s+(\\d+)\\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
@@ -196,7 +200,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
 
         if (limite is null)
         {
-            return baseResponse;
+            return await AppendPaceAlertAsync(baseResponse, compra, cancellationToken);
         }
 
         var (periodStartUtc, periodEndUtc) = GetBillingPeriod(compraDateUtc);
@@ -220,11 +224,83 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
 
         if (gastoAcumulado > limite.Valor)
         {
-            return $"{baseResponse}\n⚠ Limite de {categoriaDisplayName} ultrapassado: R$ {formattedGasto} de R$ {formattedLimite}";
+            return await AppendPaceAlertAsync(
+                $"{baseResponse}\n⚠ Limite de {categoriaDisplayName} ultrapassado: R$ {formattedGasto} de R$ {formattedLimite}",
+                compra,
+                cancellationToken);
         }
 
         int percentual = (int)Math.Round(gastoAcumulado / limite.Valor * 100);
-        return $"{baseResponse}\n{categoriaDisplayName}: R$ {formattedGasto} de R$ {formattedLimite} ({percentual}%)";
+        return await AppendPaceAlertAsync(
+            $"{baseResponse}\n{categoriaDisplayName}: R$ {formattedGasto} de R$ {formattedLimite} ({percentual}%)",
+            compra,
+            cancellationToken);
+    }
+
+    private async Task<string> AppendPaceAlertAsync(
+        string response,
+        Compra compra,
+        CancellationToken cancellationToken)
+    {
+        var (currentStartUtc, _) = GetBillingPeriod(compra.Data);
+        DateTime currentEndUtc = compra.Data.Date;
+        DateTime previousStartUtc = currentStartUtc.AddMonths(-1);
+        DateTime previousEndUtc = currentEndUtc.AddMonths(-1);
+
+        IReadOnlyList<Compra> currentPurchases = await _compraRepository.ListByPeriodAsync(
+            currentStartUtc, currentEndUtc.AddDays(1), cancellationToken);
+        IReadOnlyList<Compra> previousPurchases = await _compraRepository.ListByPeriodAsync(
+            previousStartUtc, previousEndUtc.AddDays(1), cancellationToken);
+
+        double currentTotal = currentPurchases.Sum(item => item.Valor);
+        double previousTotal = previousPurchases.Sum(item => item.Valor);
+        if (previousTotal <= 0)
+        {
+            return response;
+        }
+
+        double totalBeforePurchase = Math.Max(0, currentTotal - compra.Valor);
+        bool crossedDanger = totalBeforePurchase < previousTotal * 2 && currentTotal >= previousTotal * 2;
+        bool crossedWarning = totalBeforePurchase < previousTotal * 1.5 && currentTotal >= previousTotal * 1.5;
+        if (!crossedDanger && !crossedWarning)
+        {
+            return response;
+        }
+
+        StringBuilder alert = new StringBuilder();
+        alert.AppendLine(crossedDanger
+            ? "🚨 ALERTA VERMELHO: ritmo de gastos muito elevado"
+            : "⚠️ ALERTA AMARELO: ritmo de gastos elevado");
+        alert.AppendLine();
+        alert.AppendLine($"Ciclo atual ({currentStartUtc:dd/MM/yyyy} a {currentEndUtc:dd/MM/yyyy}): R$ {currentTotal.ToString("N2", PtBrCulture)}");
+        alert.AppendLine($"Mesmo período do ciclo anterior ({previousStartUtc:dd/MM/yyyy} a {previousEndUtc:dd/MM/yyyy}): R$ {previousTotal.ToString("N2", PtBrCulture)}");
+        alert.AppendLine($"Ritmo atual: {(int)Math.Round(currentTotal / previousTotal * 100)}% do período anterior ({FormatSignedCurrency(currentTotal - previousTotal)}).");
+        alert.AppendLine();
+        alert.AppendLine("Categorias:");
+
+        foreach (Categoria categoria in Enum.GetValues<Categoria>())
+        {
+            double currentCategoryTotal = currentPurchases.Where(item => item.Categoria == categoria).Sum(item => item.Valor);
+            double previousCategoryTotal = previousPurchases.Where(item => item.Categoria == categoria).Sum(item => item.Valor);
+            alert.Append($"• {GetCategoryDisplayName(categoria)}: R$ {currentCategoryTotal.ToString("N2", PtBrCulture)} vs R$ {previousCategoryTotal.ToString("N2", PtBrCulture)} ");
+
+            if (previousCategoryTotal <= 0 && currentCategoryTotal <= 0)
+                alert.Append("(sem gastos nos dois períodos)");
+            else if (previousCategoryTotal <= 0)
+                alert.Append("(sem histórico comparável)");
+            else
+                alert.Append($"({(int)Math.Round(currentCategoryTotal / previousCategoryTotal * 100)}%, {FormatSignedCurrency(currentCategoryTotal - previousCategoryTotal)})");
+
+            alert.AppendLine();
+        }
+
+        return $"{response}\n\n{alert.ToString().TrimEnd()}";
+    }
+
+    private static string FormatSignedCurrency(double value)
+    {
+        string signal = value >= 0 ? "+" : "-";
+        return $"{signal}R$ {Math.Abs(value).ToString("N2", PtBrCulture)}";
     }
 
     private async Task<string> HandleLimitAsync(
@@ -343,6 +419,32 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         }
 
         string argsText = commandMatch.Groups[1].Value.Trim();
+        Match dateRangeMatch = DateRangeRegex.Match(argsText);
+        if (dateRangeMatch.Success)
+        {
+            if (!TryParseDate(dateRangeMatch.Groups["start"].Value, out DateTime rangeStartUtc) ||
+                !TryParseDate(dateRangeMatch.Groups["end"].Value, out DateTime rangeEndUtc))
+            {
+                return "Data invalida. Use DD/MM/AA ou DD/MM/AAAA. Exemplo: /listar 10/02/26 - 20/02/2026";
+            }
+
+            if (rangeStartUtc > rangeEndUtc)
+            {
+                return "Data inicial nao pode ser posterior a data final.";
+            }
+
+            return await HandleDateRangeListAsync(
+                rangeStartUtc,
+                rangeEndUtc,
+                dateRangeMatch.Groups["filter"].Value.Trim(),
+                cancellationToken);
+        }
+
+        if (Regex.IsMatch(argsText, "^\\d{2}/\\d{2}/", RegexOptions.CultureInvariant))
+        {
+            return "Data invalida. Use DD/MM/AA ou DD/MM/AAAA. Exemplo: /listar 10/02/26 - 20/02/2026";
+        }
+
         if (!TryParseListArgs(
             argsText,
             messageDateUtc,
@@ -388,6 +490,59 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
 
         string formattedTotalMonthValue = totalMonthValue.ToString("N2", PtBrCulture);
         messageBuilder.Append($"\nTotal: R$ {formattedTotalMonthValue}");
+        return messageBuilder.ToString();
+    }
+
+    private async Task<string> HandleDateRangeListAsync(
+        DateTime rangeStartUtc,
+        DateTime rangeEndUtc,
+        string rangeFilterText,
+        CancellationToken cancellationToken)
+    {
+        ListarFiltroModo filtroModo = ListarFiltroModo.Nenhum;
+        List<Categoria> categoriasFiltro = new List<Categoria>();
+
+        if (rangeFilterText.Length > 0 &&
+            !TryParseCategoryFilter(rangeFilterText, out filtroModo, out categoriasFiltro, out string parseError))
+        {
+            return parseError;
+        }
+
+        IReadOnlyList<Compra> compras = await _compraRepository.ListByPeriodAsync(
+            rangeStartUtc,
+            rangeEndUtc.AddDays(1),
+            cancellationToken);
+        IReadOnlyList<Compra> comprasFiltradas = ApplyFilter(compras, filtroModo, categoriasFiltro);
+        string periodRange = $"{rangeStartUtc:dd/MM/yyyy} a {rangeEndUtc:dd/MM/yyyy}";
+
+        if (comprasFiltradas.Count == 0)
+        {
+            if (filtroModo == ListarFiltroModo.Inclusao)
+                return $"Nenhuma compra de {BuildFilterSuffix(filtroModo, categoriasFiltro)} de {periodRange}.";
+            if (filtroModo == ListarFiltroModo.Exclusao)
+                return $"Nenhuma compra de {periodRange} ({BuildFilterSuffix(filtroModo, categoriasFiltro)}).";
+
+            return $"Nenhuma compra encontrada de {periodRange}.";
+        }
+
+        string headerSuffix = filtroModo == ListarFiltroModo.Nenhum
+            ? string.Empty
+            : $" ({BuildFilterSuffix(filtroModo, categoriasFiltro)})";
+        StringBuilder messageBuilder = new StringBuilder();
+        messageBuilder.AppendLine($"Compras de {periodRange}{headerSuffix}:");
+
+        double totalValue = 0;
+        foreach (Compra compra in comprasFiltradas)
+        {
+            totalValue += compra.Valor;
+            string formattedValue = compra.Valor.ToString("N2", PtBrCulture);
+            string categoriaDisplayName = GetCategoryDisplayName(compra.Categoria);
+            messageBuilder.AppendLine();
+            messageBuilder.AppendLine($"[{compra.Id}] {categoriaDisplayName} — R$ {formattedValue}");
+            messageBuilder.AppendLine($"    {compra.Descricao} · {compra.Data:dd/MM HH:mm}");
+        }
+
+        messageBuilder.Append($"\nTotal: R$ {totalValue.ToString("N2", PtBrCulture)}");
         return messageBuilder.ToString();
     }
 
@@ -551,6 +706,39 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         string formattedValue = compra.Valor.ToString("N2", PtBrCulture);
         string categoriaDisplayName = GetCategoryDisplayName(compra.Categoria);
         return $"Compra removida: R$ {formattedValue} - {compra.Descricao} ({categoriaDisplayName})";
+    }
+
+    private static bool TryParseDate(string dateText, out DateTime dateUtc)
+    {
+        dateUtc = default;
+        Match match = Regex.Match(
+            dateText,
+            "^(\\d{2})/(\\d{2})/(\\d{2}|\\d{4})$",
+            RegexOptions.CultureInvariant);
+
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        int year = match.Groups[3].Value.Length == 2
+            ? 2000 + int.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture)
+            : int.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
+
+        try
+        {
+            dateUtc = new DateTime(
+                year,
+                int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture),
+                int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture),
+                0, 0, 0,
+                DateTimeKind.Utc);
+            return true;
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return false;
+        }
     }
 
     private static bool TryParseMonthYear(string monthYearText, out DateTime referenceDateUtc)
