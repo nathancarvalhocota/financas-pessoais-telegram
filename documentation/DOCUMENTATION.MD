@@ -13,6 +13,33 @@ For every new implementation from now on, this file must be updated with:
 
 ## Change Log
 
+### 2026-07-12 - Date-range listing and cycle pace alerts
+Scope:
+- Added explicit date ranges to `/listar` while preserving cycle and category-filter queries.
+- Added automatic total-spend pace alerts after `/compra`.
+
+Modified:
+- `src/FinanceBot.Application/UseCases/TelegramCommandRouter.cs`
+- `tests/FinanceBot.UnitTests/Application/TelegramCommandRouterTests.cs`
+- `README.md`
+- `documentation/DOCUMENTATION.MD`
+
+Implemented behavior:
+- `/listar` accepts `DD/MM/AA` and `DD/MM/AAAA` date ranges, includes both boundary days, and keeps inclusion/exclusion category filters.
+- Explicit date ranges use UTC day boundaries, preserving the project's existing date and time behavior.
+- A purchase triggers Warning at 150% and Danger at 200% of the equivalent previous-cycle total, only when crossing each threshold.
+- Alert messages compare every available category against the same period in the previous cycle.
+
+Decisions:
+- The existing 15th-to-14th billing cycle remains the source of truth for monthly commands and pace alerts.
+- Explicit date ranges provide the flexible manual comparison workflow, so no separate `/ritmo` command was added.
+- Alert levels are derived from the before/after purchase totals; no notification state is persisted.
+
+Validation:
+- `dotnet build FinanceBot.sln --no-restore` completed successfully.
+- `dotnet test tests/FinanceBot.UnitTests/FinanceBot.UnitTests.csproj --no-restore --no-build` passed: 26/26.
+- `dotnet test FinanceBot.sln --no-restore` was run; all 26 unit tests and 6/8 integration tests passed. The remaining integration failures are caused by denied Windows Event Log writes in the test environment when warning logs are emitted, not by command behavior.
+
 ### 2026-02-28 - /compra now returns specific invalid category feedback
 Scope:
 - Improved `/compra` validation feedback when category does not exist.

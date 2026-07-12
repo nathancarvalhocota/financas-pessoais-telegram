@@ -71,29 +71,39 @@ Registra uma nova despesa do mês com base na data/hora da mensagem.
 
 ---
 
-### 2) `/listar` – Listar compras de um mês
-Lista as compras de um mês específico informado como `MM/YY`.
+### 2) `/listar` – Listar compras por ciclo ou intervalo
+Lista as compras de um ciclo (`MM/YY`) ou de um intervalo de datas específico.
 
 **Formato:**
 ```
-/listar <MES/ANO>
+/listar [<MES/ANO> | <DATA_INICIAL> - <DATA_FINAL>] [<CATEGORIAS>]
 ```
 
 **Exemplos:**
 ```
 /listar 09/26
 /listar 01/27
+/listar 10/02/26 - 20/02/2026
+/listar 10/02/26 - 20/02/2026 Mercado, Uber
+/listar 10/02/26 - 20/02/2026 sem Lazer
 ```
 
 **Regras:**
-- `MES/ANO` obrigatório no formato `MM/YY`.
-- Se o usuário não informar parâmetro, assume o mês atual.
+- `MES/ANO` usa o ciclo de dia 15 até dia 14; se omitido, assume o ciclo atual.
+- Intervalos aceitam `DD/MM/AA` ou `DD/MM/AAAA`, inclusive em formatos misturados, e incluem os dois dias informados.
+- Filtros de inclusão e exclusão por categoria funcionam tanto para ciclos quanto para intervalos.
 - Retorno ordenado por data (mais recente primeiro).
 - Cada item exibe o `id` da compra (necessário para `/deletar`).
 
 **Resposta esperada:**
 - lista com `id`, `data`, `valor`, `descricao`, `categoria`
-- total do mês ao final.
+- total do período ao final.
+
+### Alertas automáticos de ritmo
+
+Após cada `/compra`, o bot compara o gasto total acumulado do ciclo até aquele dia com o mesmo trecho do ciclo anterior. Ele envia um alerta amarelo ao cruzar 150% e um alerta vermelho ao cruzar 200% do gasto anterior. Cada nível é exibido apenas no momento do cruzamento.
+
+Quando um alerta é disparado, a mensagem também compara todas as categorias disponíveis com o período anterior equivalente. Categorias sem histórico informam que não há base comparável.
 
 ---
 

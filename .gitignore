@@ -53,3 +53,6 @@ node_modules/
 
 # Docker overrides
 docker-compose.override.yml
+
+# Local planning artifacts
+docs/superpowers/

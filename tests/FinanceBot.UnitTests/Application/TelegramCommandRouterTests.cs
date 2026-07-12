@@ -336,12 +336,104 @@ public sealed class TelegramCommandRouterTests
         Assert.Contains("Total: R$ 150,00", response);
     }
 
+    [Fact]
+    public async Task RouteAsync_ListWithExplicitDateRange_ReturnsOnlyPurchasesInsideInclusiveRange()
+    {
+        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        TelegramCommandRouter router = new TelegramCommandRouter(
+            compraRepository,
+            new InMemoryLimiteCategoriaRepository());
+
+        await router.RouteAsync("/compra 10, Primeiro, Mercado", new DateTimeOffset(2026, 2, 10, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
+        await router.RouteAsync("/compra 20, Segundo, Uber", new DateTimeOffset(2026, 2, 20, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
+        await router.RouteAsync("/compra 30, Fora, Lazer", new DateTimeOffset(2026, 2, 21, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
+
+        string response = await router.RouteAsync(
+            "/listar 10/02/26 - 20/02/2026",
+            new DateTimeOffset(2026, 2, 20, 12, 0, 0, TimeSpan.Zero),
+            CancellationToken.None);
+
+        Assert.Contains("Compras de 10/02/2026 a 20/02/2026:", response);
+        Assert.Contains("Primeiro", response);
+        Assert.Contains("Segundo", response);
+        Assert.DoesNotContain("Fora", response);
+        Assert.Contains("Total: R$ 30,00", response);
+    }
+
+    [Fact]
+    public async Task RouteAsync_ListWithInvertedDateRange_ReturnsSpecificError()
+    {
+        TelegramCommandRouter router = new TelegramCommandRouter(
+            new InMemoryCompraRepository(),
+            new InMemoryLimiteCategoriaRepository());
+
+        string response = await router.RouteAsync(
+            "/listar 20/02/26 - 10/02/2026",
+            AbrilDeVinteSeis,
+            CancellationToken.None);
+
+        Assert.Equal("Data inicial nao pode ser posterior a data final.", response);
+    }
+
+    [Fact]
+    public async Task RouteAsync_WhenTotalCrossesWarning_ReturnsHistoricalAlertForAllCategories()
+    {
+        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        TelegramCommandRouter router = new TelegramCommandRouter(
+            compraRepository,
+            new InMemoryLimiteCategoriaRepository());
+
+        DateTimeOffset previousCycleDate = new DateTimeOffset(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);
+        DateTimeOffset currentCycleDate = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
+
+        await router.RouteAsync("/compra 60, Mercado anterior, Mercado", previousCycleDate, CancellationToken.None);
+        await router.RouteAsync("/compra 40, Uber anterior, Uber", previousCycleDate, CancellationToken.None);
+
+        string response = await router.RouteAsync(
+            "/compra 160, Mercado atual, Mercado",
+            currentCycleDate,
+            CancellationToken.None);
+
+        Assert.Contains("ALERTA AMARELO", response);
+        Assert.Contains("Ritmo atual: 160% do período anterior (+R$ 60,00).", response);
+        Assert.Contains("• Mercado: R$ 160,00 vs R$ 60,00 (267%, +R$ 100,00)", response);
+        Assert.Contains("• Educacao: R$ 0,00 vs R$ 0,00 (sem gastos nos dois períodos)", response);
+        Assert.Contains("• Uber: R$ 0,00 vs R$ 40,00 (0%, -R$ 40,00)", response);
+    }
+
+    [Fact]
+    public async Task RouteAsync_WhenTotalCrossesDanger_DoesNotRepeatItOnLaterPurchases()
+    {
+        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        TelegramCommandRouter router = new TelegramCommandRouter(
+            compraRepository,
+            new InMemoryLimiteCategoriaRepository());
+
+        DateTimeOffset previousCycleDate = new DateTimeOffset(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);
+        DateTimeOffset currentCycleDate = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
+
+        await router.RouteAsync("/compra 100, Base anterior, Mercado", previousCycleDate, CancellationToken.None);
+        await router.RouteAsync("/compra 150, Warning, Mercado", currentCycleDate, CancellationToken.None);
+
+        string dangerResponse = await router.RouteAsync("/compra 50, Danger, Mercado", currentCycleDate, CancellationToken.None);
+        string laterResponse = await router.RouteAsync("/compra 10, Depois, Mercado", currentCycleDate, CancellationToken.None);
+
+        Assert.Contains("ALERTA VERMELHO", dangerResponse);
+        Assert.DoesNotContain("ALERTA", laterResponse);
+    }
+
     private sealed class InMemoryCompraRepository : ICompraRepository
     {
         private List<Compra> Compras { get; } = new List<Compra>();
+        private int _nextId = 1;
 
         public Task AddAsync(Compra compra, CancellationToken cancellationToken)
         {
+            if (compra.Id == 0)
+            {
+                compra.Id = _nextId++;
+            }
+
             Compras.Add(compra);
             return Task.CompletedTask;
         }
@@ -351,7 +443,10 @@ public sealed class TelegramCommandRouterTests
             DateTime periodEndUtc,
             CancellationToken cancellationToken)
         {
-            IReadOnlyList<Compra> compras = Compras;
+            IReadOnlyList<Compra> compras = Compras
+                .Where(compra => compra.Data >= periodStartUtc && compra.Data < periodEndUtc)
+                .OrderByDescending(compra => compra.Data)
+                .ToList();
             return Task.FromResult(compras);
         }
 
