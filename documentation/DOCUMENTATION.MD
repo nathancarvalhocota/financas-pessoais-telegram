@@ -13,6 +13,30 @@ For every new implementation from now on, this file must be updated with:
 
 ## Change Log
 
+### 2026-07-15 - São Paulo cycle boundaries and full-cycle alerts
+Scope:
+- Made cycle and explicit date-range boundaries use the `America/Sao_Paulo` calendar.
+- Replaced same-period pace alerts with full-cycle total-spend alerts.
+- Documented explicit `/listar` date ranges in `/info`.
+
+Modified:
+- `src/FinanceBot.Application/UseCases/TelegramCommandRouter.cs`
+- `tests/FinanceBot.UnitTests/Application/TelegramCommandRouterTests.cs`
+- `README.md`
+- `documentation/DOCUMENTATION.MD`
+
+Implemented behavior:
+- A purchase made at 23h on day 14 in São Paulo remains in the cycle ending on day 14, even when its UTC timestamp is already day 15.
+- The previous cycle's complete total is the alert baseline. Alerts are emitted when the current cycle crosses 125% (Warning), 150% (Danger), or 200% (Urgente), without repeating a level after it has been crossed.
+- Category details in an alert compare each category's complete current-cycle total with its complete previous-cycle total.
+
+Decisions:
+- Purchase timestamps remain stored and displayed as they were; only calendar-day and cycle-boundary calculations use São Paulo time.
+- `/listar` continues to support both cycle and explicit date-range queries, with the date-range syntax included in `/info`.
+
+Validation:
+- `dotnet test tests/FinanceBot.UnitTests/FinanceBot.UnitTests.csproj --no-restore` passed: 28/28.
+
 ### 2026-07-12 - Date-range listing and cycle pace alerts
 Scope:
 - Added explicit date ranges to `/listar` while preserving cycle and category-filter queries.

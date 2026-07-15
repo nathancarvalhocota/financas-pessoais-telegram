@@ -10,6 +10,7 @@ namespace FinanceBot.Application.UseCases;
 public sealed class TelegramCommandRouter : ITelegramCommandRouter
 {
     private static readonly CultureInfo PtBrCulture = new CultureInfo("pt-BR");
+    private static readonly TimeZoneInfo SaoPauloTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
 
     private static readonly Regex CompraCommandRegex = new Regex(
         "^/compra(?:@[A-Za-z0-9_]+)?\\s+([0-9]+(?:[.,][0-9]{1,2})?)\\s*,\\s*(.+?)\\s*,\\s*(.+)$",
@@ -66,7 +67,9 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         "Filtre por categoria, ou use 'sem' para excluir categorias.\n" +
         "Ex: /listar 04/26\n" +
         "Ex: /listar 04/26 Mercado, Uber\n" +
-        "Ex: /listar 04/26 sem Lazer\n\n" +
+        "Ex: /listar 04/26 sem Lazer\n" +
+        "Ex: /listar 10/02/26 - 20/02/2026\n" +
+        "Ex: /listar 10/02/26 - 20/02/2026 Mercado, Uber\n\n" +
         "/deletar <ID>\n" +
         "Remove uma compra pelo ID exibido no /listar.\n" +
         "Ex: /deletar 42\n\n" +
@@ -203,7 +206,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             return await AppendPaceAlertAsync(baseResponse, compra, cancellationToken);
         }
 
-        var (periodStartUtc, periodEndUtc) = GetBillingPeriod(compraDateUtc);
+        var (periodStartUtc, periodEndUtc) = GetBillingPeriod(GetBusinessDateUtc(compraDateUtc));
 
         IReadOnlyList<Compra> comprasDoMes = await _compraRepository.ListByPeriodAsync(
             periodStartUtc,
@@ -242,8 +245,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         Compra compra,
         CancellationToken cancellationToken)
     {
-        var (currentStartUtc, _) = GetBillingPeriod(compra.Data);
-        DateTime currentEndUtc = compra.Data.Date;
+        var (currentStartUtc, currentEndUtc) = GetBillingPeriod(GetBusinessDateUtc(compra.Data));
         DateTime previousStartUtc = currentStartUtc.AddMonths(-1);
         DateTime previousEndUtc = currentEndUtc.AddMonths(-1);
 
@@ -260,21 +262,24 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         }
 
         double totalBeforePurchase = Math.Max(0, currentTotal - compra.Valor);
-        bool crossedDanger = totalBeforePurchase < previousTotal * 2 && currentTotal >= previousTotal * 2;
-        bool crossedWarning = totalBeforePurchase < previousTotal * 1.5 && currentTotal >= previousTotal * 1.5;
-        if (!crossedDanger && !crossedWarning)
+        bool crossedMegaUrgent = totalBeforePurchase < previousTotal * 2 && currentTotal >= previousTotal * 2;
+        bool crossedDanger = totalBeforePurchase < previousTotal * 1.5 && currentTotal >= previousTotal * 1.5;
+        bool crossedWarning = totalBeforePurchase < previousTotal * 1.25 && currentTotal >= previousTotal * 1.25;
+        if (!crossedMegaUrgent && !crossedDanger && !crossedWarning)
         {
             return response;
         }
 
         StringBuilder alert = new StringBuilder();
-        alert.AppendLine(crossedDanger
-            ? "🚨 ALERTA VERMELHO: ritmo de gastos muito elevado"
-            : "⚠️ ALERTA AMARELO: ritmo de gastos elevado");
+        alert.AppendLine(crossedMegaUrgent
+            ? "🚨 ALERTA URGENTE: gasto do ciclo o dobro do anterior"
+            : crossedDanger
+                ? "🚨 ALERTA VERMELHO: gasto do ciclo muito acima do anterior"
+                : "⚠️ ALERTA AMARELO: gasto do ciclo acima do anterior");
         alert.AppendLine();
         alert.AppendLine($"Ciclo atual ({currentStartUtc:dd/MM/yyyy} a {currentEndUtc:dd/MM/yyyy}): R$ {currentTotal.ToString("N2", PtBrCulture)}");
-        alert.AppendLine($"Mesmo período do ciclo anterior ({previousStartUtc:dd/MM/yyyy} a {previousEndUtc:dd/MM/yyyy}): R$ {previousTotal.ToString("N2", PtBrCulture)}");
-        alert.AppendLine($"Ritmo atual: {(int)Math.Round(currentTotal / previousTotal * 100)}% do período anterior ({FormatSignedCurrency(currentTotal - previousTotal)}).");
+        alert.AppendLine($"Ciclo anterior ({previousStartUtc:dd/MM/yyyy} a {previousEndUtc:dd/MM/yyyy}): R$ {previousTotal.ToString("N2", PtBrCulture)}");
+        alert.AppendLine($"Gasto atual: {(int)Math.Round(currentTotal / previousTotal * 100)}% do ciclo anterior ({FormatSignedCurrency(currentTotal - previousTotal)}).");
         alert.AppendLine();
         alert.AppendLine("Categorias:");
 
@@ -390,7 +395,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             return $"Nenhum limite definido para {categoriaDisplayName}.";
         }
 
-        var (periodStartUtc, periodEndUtc) = GetBillingPeriod(DateTime.UtcNow);
+        var (periodStartUtc, periodEndUtc) = GetBillingPeriod(GetBusinessDateUtc(DateTime.UtcNow));
 
         IReadOnlyList<Compra> comprasDoMes = await _compraRepository.ListByPeriodAsync(
             periodStartUtc, periodEndUtc.AddDays(1), cancellationToken);
@@ -554,7 +559,7 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
         out List<Categoria> categoriasFiltro,
         out string errorMessage)
     {
-        referenceDateUtc = messageDateUtc.UtcDateTime;
+        referenceDateUtc = GetBusinessDateUtc(messageDateUtc.UtcDateTime);
         filtroModo = ListarFiltroModo.Nenhum;
         categoriasFiltro = new List<Categoria>();
         errorMessage = string.Empty;
@@ -727,12 +732,13 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
 
         try
         {
-            dateUtc = new DateTime(
+            DateTime localDate = new DateTime(
                 year,
                 int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture),
                 int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture),
                 0, 0, 0,
-                DateTimeKind.Utc);
+                DateTimeKind.Unspecified);
+            dateUtc = TimeZoneInfo.ConvertTimeToUtc(localDate, SaoPauloTimeZone);
             return true;
         }
         catch (ArgumentOutOfRangeException)
@@ -829,8 +835,26 @@ public sealed class TelegramCommandRouter : ITelegramCommandRouter
             if (month == 0) { month = 12; year--; }
         }
 
-        DateTime start = new DateTime(year, month, 15, 0, 0, 0, DateTimeKind.Utc);
+        DateTime start = new DateTime(year, month, 15, 0, 0, 0, DateTimeKind.Unspecified);
         DateTime end = start.AddMonths(1).AddDays(-1);
-        return (start, end);
+        return (
+            TimeZoneInfo.ConvertTimeToUtc(start, SaoPauloTimeZone),
+            TimeZoneInfo.ConvertTimeToUtc(end, SaoPauloTimeZone));
+    }
+
+    private static DateTime GetBusinessDateUtc(DateTime dateUtc)
+    {
+        DateTimeOffset localDateTime = TimeZoneInfo.ConvertTime(
+            new DateTimeOffset(dateUtc, TimeSpan.Zero),
+            SaoPauloTimeZone);
+
+        return new DateTime(
+            localDateTime.Year,
+            localDateTime.Month,
+            localDateTime.Day,
+            0,
+            0,
+            0,
+            DateTimeKind.Utc);
     }
 }
