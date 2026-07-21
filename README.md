@@ -99,11 +99,13 @@ Lista as compras de um ciclo (`MM/YY`) ou de um intervalo de datas específico.
 - lista com `id`, `data`, `valor`, `descricao`, `categoria`
 - total do período ao final.
 
-### Alertas automáticos de ritmo
+### Alertas automáticos por ciclo
 
-Após cada `/compra`, o bot compara o gasto total acumulado do ciclo até aquele dia com o mesmo trecho do ciclo anterior. Ele envia um alerta amarelo ao cruzar 150% e um alerta vermelho ao cruzar 200% do gasto anterior. Cada nível é exibido apenas no momento do cruzamento.
+Após cada `/compra`, o bot compara o total gasto no ciclo atual com o total do ciclo anterior completo. Ele envia um alerta amarelo ao cruzar 125%, um alerta vermelho ao cruzar 150% e um alerta urgente ao cruzar 200% do gasto anterior. Cada nível é exibido apenas no momento do cruzamento.
 
-Quando um alerta é disparado, a mensagem também compara todas as categorias disponíveis com o período anterior equivalente. Categorias sem histórico informam que não há base comparável.
+Quando um alerta é disparado, a mensagem também compara todas as categorias disponíveis com o ciclo anterior completo. Categorias sem histórico informam que não há base comparável.
+
+Os limites dos ciclos e dos intervalos de datas usam o calendário de `America/Sao_Paulo`; assim, uma compra às 23h do dia 14 ainda pertence ao ciclo que termina no dia 14.
 
 ---
 

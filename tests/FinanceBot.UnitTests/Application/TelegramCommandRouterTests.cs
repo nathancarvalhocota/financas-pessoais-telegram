@@ -312,6 +312,7 @@ public sealed class TelegramCommandRouterTests
 
         Assert.Contains("/listar 04/26 Mercado, Uber", response);
         Assert.Contains("sem Lazer", response);
+        Assert.Contains("/listar 10/02/26 - 20/02/2026", response);
     }
 
     [Fact]
@@ -376,7 +377,7 @@ public sealed class TelegramCommandRouterTests
     }
 
     [Fact]
-    public async Task RouteAsync_WhenTotalCrossesWarning_ReturnsHistoricalAlertForAllCategories()
+    public async Task RouteAsync_WhenCycleTotalCrossesWarning_ReturnsAlertForAllCategories()
     {
         InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
@@ -390,19 +391,19 @@ public sealed class TelegramCommandRouterTests
         await router.RouteAsync("/compra 40, Uber anterior, Uber", previousCycleDate, CancellationToken.None);
 
         string response = await router.RouteAsync(
-            "/compra 160, Mercado atual, Mercado",
+            "/compra 130, Mercado atual, Mercado",
             currentCycleDate,
             CancellationToken.None);
 
         Assert.Contains("ALERTA AMARELO", response);
-        Assert.Contains("Ritmo atual: 160% do período anterior (+R$ 60,00).", response);
-        Assert.Contains("• Mercado: R$ 160,00 vs R$ 60,00 (267%, +R$ 100,00)", response);
+        Assert.Contains("Gasto atual: 130% do ciclo anterior (+R$ 30,00).", response);
+        Assert.Contains("• Mercado: R$ 130,00 vs R$ 60,00 (217%, +R$ 70,00)", response);
         Assert.Contains("• Educacao: R$ 0,00 vs R$ 0,00 (sem gastos nos dois períodos)", response);
         Assert.Contains("• Uber: R$ 0,00 vs R$ 40,00 (0%, -R$ 40,00)", response);
     }
 
     [Fact]
-    public async Task RouteAsync_WhenTotalCrossesDanger_DoesNotRepeatItOnLaterPurchases()
+    public async Task RouteAsync_WhenCycleTotalCrossesDanger_DoesNotRepeatItOnLaterPurchases()
     {
         InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
@@ -413,13 +414,57 @@ public sealed class TelegramCommandRouterTests
         DateTimeOffset currentCycleDate = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
 
         await router.RouteAsync("/compra 100, Base anterior, Mercado", previousCycleDate, CancellationToken.None);
-        await router.RouteAsync("/compra 150, Warning, Mercado", currentCycleDate, CancellationToken.None);
-
-        string dangerResponse = await router.RouteAsync("/compra 50, Danger, Mercado", currentCycleDate, CancellationToken.None);
+        string dangerResponse = await router.RouteAsync("/compra 150, Danger, Mercado", currentCycleDate, CancellationToken.None);
         string laterResponse = await router.RouteAsync("/compra 10, Depois, Mercado", currentCycleDate, CancellationToken.None);
 
         Assert.Contains("ALERTA VERMELHO", dangerResponse);
         Assert.DoesNotContain("ALERTA", laterResponse);
+    }
+
+    [Fact]
+    public async Task RouteAsync_WhenCycleTotalCrossesTwoHundredPercent_ReturnsUrgentAlert()
+    {
+        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        TelegramCommandRouter router = new TelegramCommandRouter(
+            compraRepository,
+            new InMemoryLimiteCategoriaRepository());
+
+        DateTimeOffset previousCycleDate = new DateTimeOffset(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);
+        DateTimeOffset currentCycleDate = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
+
+        await router.RouteAsync("/compra 100, Base anterior, Mercado", previousCycleDate, CancellationToken.None);
+        await router.RouteAsync("/compra 150, Alerta vermelho, Mercado", currentCycleDate, CancellationToken.None);
+
+        string response = await router.RouteAsync(
+            "/compra 50, Alerta urgente, Mercado",
+            currentCycleDate,
+            CancellationToken.None);
+
+        Assert.Contains("ALERTA URGENTE", response);
+        Assert.Contains("Gasto atual: 200% do ciclo anterior (+R$ 100,00).", response);
+    }
+
+    [Fact]
+    public async Task RouteAsync_PurchaseAtElevenPmInSaoPauloOnTheFourteenth_RemainsInCurrentCycle()
+    {
+        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        TelegramCommandRouter router = new TelegramCommandRouter(
+            compraRepository,
+            new InMemoryLimiteCategoriaRepository());
+
+        DateTimeOffset elevenPmInSaoPauloAsUtc = new DateTimeOffset(2026, 7, 15, 2, 0, 0, TimeSpan.Zero);
+        await router.RouteAsync(
+            "/compra 120, Uber mes, Uber",
+            elevenPmInSaoPauloAsUtc,
+            CancellationToken.None);
+
+        string response = await router.RouteAsync(
+            "/listar 06/26",
+            elevenPmInSaoPauloAsUtc,
+            CancellationToken.None);
+
+        Assert.Contains("Compras de 15/06 a 14/07:", response);
+        Assert.Contains("Uber mes", response);
     }
 
     private sealed class InMemoryCompraRepository : ICompraRepository
