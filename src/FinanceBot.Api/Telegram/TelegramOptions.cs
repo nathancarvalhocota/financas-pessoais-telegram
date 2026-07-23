@@ -1,4 +1,4 @@
-namespace FinanceBot.Infrastructure.Telegram;
+namespace FinanceBot.Api.Telegram;
 
 public sealed class TelegramOptions
 {

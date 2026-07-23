@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace FinanceBot.Api.Endpoints.Contracts;
+namespace FinanceBot.Api.Telegram;
 
 public sealed class TelegramWebhookRequest
 {

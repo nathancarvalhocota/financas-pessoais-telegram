@@ -1,9 +1,7 @@
-using FinanceBot.Api.Endpoints.Contracts;
-using FinanceBot.Application.Abstractions;
-using FinanceBot.Infrastructure.Telegram;
+using FinanceBot.Application.Commands;
 using Microsoft.Extensions.Options;
 
-namespace FinanceBot.Api.Endpoints;
+namespace FinanceBot.Api.Telegram;
 
 public static class TelegramWebhookEndpoint
 {
@@ -18,8 +16,8 @@ public static class TelegramWebhookEndpoint
 
     private static async Task<IResult> HandleWebhookAsync(
         TelegramWebhookRequest? update,
-        ITelegramCommandRouter telegramCommandRouter,
-        ITelegramMessageSender telegramMessageSender,
+        TelegramCommandRouter telegramCommandRouter,
+        TelegramMessageSender telegramMessageSender,
         IOptions<TelegramOptions> telegramOptions,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
@@ -56,7 +54,7 @@ public static class TelegramWebhookEndpoint
 
         string receivedText = update.Message.Text.Trim();
         DateTimeOffset messageDateUtc = ResolveMessageDateUtc(update.Message);
-        string responseText = await telegramCommandRouter.RouteAsync(
+        string responseText = await telegramCommandRouter.RouteMessageAsync(
             receivedText,
             messageDateUtc,
             cancellationToken);

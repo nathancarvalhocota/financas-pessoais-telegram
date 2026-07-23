@@ -13,6 +13,166 @@ For every new implementation from now on, this file must be updated with:
 
 ## Change Log
 
+### 2026-07-23 - Rename command date-time helper
+Scope:
+- Renamed the application helper that converts local and UTC command dates to `DateTimeConverter`.
+
+Moved:
+- `Commands/Billing/BillingPeriodResolver.cs` to `Commands/DateTimeConverter.cs`
+
+Modified:
+- `tests/FinanceBot.IntegrationTests/Api/TelegramWebhookEndpointTests.cs`
+
+Decisions:
+- `BillingCycle` remains the Domain type that defines billing-cycle rules.
+- `DateTimeConverter` remains in Application because it performs time-zone and UTC conversion for command processing and persistence queries.
+- The integration-test host clears logging providers so warning-path tests do not require access to the Windows Event Log.
+
+Validation:
+- `dotnet test FinanceBot.sln --no-restore --nologo` passed: 51/51.
+
+### 2026-07-23 - Split Telegram command routing into focused handlers
+Scope:
+- Reduced `TelegramCommandRouter` to command identification and delegation.
+- Separated expense registration, listing, deletion, and category-limit flows into focused handlers.
+
+Added:
+- `Commands/Handlers/RegisterExpenseCommandHandler.cs`
+- `Commands/Handlers/ListExpensesCommandHandler.cs`
+- `Commands/Handlers/DeleteExpenseCommandHandler.cs`
+- `Commands/Handlers/CategoryLimitCommandHandler.cs`
+- `Commands/Parsing/TelegramCommandParser.cs`
+- `Commands/Parsing/ExpenseListQueryParser.cs`
+- `Commands/Formatting/ExpenseListFormatter.cs`
+- Shared command formatting, messages, and billing-period helpers.
+
+Modified:
+- `src/FinanceBot.Application/Commands/TelegramCommandRouter.cs`
+- `src/FinanceBot.Api/Program.cs`
+
+Decisions:
+- New types use `Expense` rather than `Purchase`; existing Portuguese domain types remain unchanged.
+- Existing `Regex` construction and patterns were retained rather than converted to `GeneratedRegex`.
+- The spending-pace alert remains a private responsibility of `RegisterExpenseCommandHandler`; no generic alert service was introduced.
+- Concrete handlers are composed at the API dependency-injection root. No handler interface was added.
+- `TimeProvider` supplies the current UTC time for category-limit queries.
+
+Validation:
+- `dotnet test FinanceBot.sln --no-restore --nologo` passed: 51/51.
+
+### 2026-07-23 - Organize Domain by business concept
+Scope:
+- Reorganized Domain files into folders that describe their business concept while preserving the existing Portuguese class names.
+
+Moved:
+- `Enums/Categoria.cs` to `Categories/Categoria.cs`
+- `CategoryCatalog.cs` to `Categories/CategoryCatalog.cs`
+- `Entities/Compra.cs` to `Expenses/Compra.cs`
+- `Entities/LimiteCategoria.cs` to `CategoryLimits/LimiteCategoria.cs`
+- `BillingCycle.cs` and `SpendingAlertPolicy.cs` to `Billing/`
+
+Decisions:
+- Namespaces now mirror the domain folders: `Categories`, `Expenses`, `CategoryLimits`, and `Billing`.
+- The current EF Core model snapshot was updated only to reflect the new CLR type names. Historical migration snapshots were retained unchanged.
+- This does not modify the database schema, create a migration, or affect registered data.
+
+Validation:
+- `dotnet test FinanceBot.sln --no-restore --nologo` passed: 51/51.
+
+### 2026-07-23 - Extract financial rules to Domain
+Scope:
+- Moved category recognition, billing-cycle calculation, spending-alert thresholds, and category-limit calculations into the Domain project.
+
+Added:
+- `src/FinanceBot.Domain/CategoryCatalog.cs`
+- `src/FinanceBot.Domain/BillingCycle.cs`
+- `src/FinanceBot.Domain/SpendingAlertPolicy.cs`
+- Domain tests for category parsing, billing cycles, alert thresholds, and category limits.
+
+Modified:
+- `src/FinanceBot.Domain/Entities/LimiteCategoria.cs`
+- `src/FinanceBot.Application/Commands/TelegramCommandRouter.cs`
+
+Decisions:
+- Domain rules use English names for all newly added code.
+- `BillingCycle` works with local `DateOnly` values; Telegram timestamp and São Paulo-to-UTC conversion remain in Application.
+- The router now delegates category parsing/display, cycle boundaries, alert-level decisions, and limit calculations to Domain types.
+
+Validation:
+- `dotnet test FinanceBot.sln --no-restore --nologo` passed: 51/51.
+
+### 2026-07-23 - Rename Application use-case folder to Commands
+Scope:
+- Moved the Telegram command router from the generic `UseCases` folder to `Commands`.
+
+Moved:
+- `src/FinanceBot.Application/UseCases/TelegramCommandRouter.cs` to `src/FinanceBot.Application/Commands/TelegramCommandRouter.cs`
+
+Decisions:
+- `Commands` describes the router's current responsibility more clearly than `UseCases`.
+- Removed the empty `Application/UseCases` folder.
+
+Validation:
+- `dotnet test FinanceBot.sln --no-restore --nologo` passed: 36/36.
+
+### 2026-07-23 - Group persistence contracts by business area
+Scope:
+- Moved purchase and category-limit repository contracts out of the generic `Abstractions` folder.
+
+Moved:
+- `src/FinanceBot.Application/Abstractions/ICompraRepository.cs` to `src/FinanceBot.Application/Compras/ICompraRepository.cs`
+- `src/FinanceBot.Application/Abstractions/ILimiteCategoriaRepository.cs` to `src/FinanceBot.Application/Limites/ILimiteCategoriaRepository.cs`
+
+Decisions:
+- Persistence contracts now live beside the business area that consumes them.
+- Removed the empty `Application/Abstractions` folder.
+
+Validation:
+- `dotnet test FinanceBot.sln --no-restore --nologo` passed: 36/36.
+
+### 2026-07-23 - Move Telegram adapter to API
+Scope:
+- Moved the Telegram webhook, request contract, sender, and options to the API project.
+- Kept Infrastructure focused on persistence and dependency registration for persistence services.
+
+Moved:
+- `src/FinanceBot.Api/Endpoints/TelegramWebhookEndpoint.cs` to `src/FinanceBot.Api/Telegram/TelegramWebhookEndpoint.cs`
+- `src/FinanceBot.Api/Endpoints/Contracts/TelegramWebhookRequest.cs` to `src/FinanceBot.Api/Telegram/TelegramWebhookRequest.cs`
+- `src/FinanceBot.Infrastructure/Telegram/TelegramMessageSender.cs` to `src/FinanceBot.Api/Telegram/TelegramMessageSender.cs`
+- `src/FinanceBot.Infrastructure/Telegram/TelegramOptions.cs` to `src/FinanceBot.Api/Telegram/TelegramOptions.cs`
+- `tests/FinanceBot.UnitTests/Infrastructure/TelegramMessageSenderTests.cs` to `tests/FinanceBot.UnitTests/Api/TelegramMessageSenderTests.cs`
+
+Decisions:
+- The API owns Telegram as its inbound and outbound transport adapter.
+- Telegram options and its typed HTTP client are registered in `Program.cs`.
+
+Validation:
+- `dotnet test FinanceBot.sln --nologo` passed: 36/36.
+
+### 2026-07-23 - Remove unnecessary Telegram interfaces
+Scope:
+- Removed the Telegram command router and message sender interfaces because each had a single implementation.
+- Removed empty API, Application, and Domain folders.
+
+Modified:
+- `src/FinanceBot.Api/Program.cs`
+- `src/FinanceBot.Api/Endpoints/TelegramWebhookEndpoint.cs`
+- `src/FinanceBot.Application/UseCases/TelegramCommandRouter.cs`
+- `src/FinanceBot.Infrastructure/DependencyInjection/InfrastructureServiceCollectionExtensions.cs`
+- `src/FinanceBot.Infrastructure/Telegram/TelegramMessageSender.cs`
+- `tests/FinanceBot.IntegrationTests/Api/TelegramWebhookEndpointTests.cs`
+
+Removed:
+- `src/FinanceBot.Application/Abstractions/ITelegramCommandRouter.cs`
+- `src/FinanceBot.Application/Abstractions/ITelegramMessageSender.cs`
+
+Decisions:
+- The endpoint now depends directly on `TelegramCommandRouter` and `TelegramMessageSender`.
+- Integration tests record outbound Telegram requests through a custom `HttpMessageHandler`, exercising the concrete sender without a production-only abstraction.
+
+Validation:
+- `dotnet test FinanceBot.sln --no-restore --nologo` passed: 36/36.
+
 ### 2026-07-15 - São Paulo cycle boundaries and full-cycle alerts
 Scope:
 - Made cycle and explicit date-range boundaries use the `America/Sao_Paulo` calendar.

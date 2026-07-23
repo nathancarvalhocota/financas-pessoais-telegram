@@ -1,7 +1,7 @@
-using FinanceBot.Domain.Entities;
-using FinanceBot.Domain.Enums;
+using FinanceBot.Domain.Categories;
+using FinanceBot.Domain.CategoryLimits;
 
-namespace FinanceBot.Application.Abstractions;
+namespace FinanceBot.Application.Limites;
 
 public interface ILimiteCategoriaRepository
 {

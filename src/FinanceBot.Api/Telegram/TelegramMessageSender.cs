@@ -1,12 +1,11 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
-using FinanceBot.Application.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace FinanceBot.Infrastructure.Telegram;
+namespace FinanceBot.Api.Telegram;
 
-public sealed class TelegramMessageSender : ITelegramMessageSender
+public sealed class TelegramMessageSender
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<TelegramMessageSender> _logger;

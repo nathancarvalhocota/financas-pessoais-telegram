@@ -1,6 +1,6 @@
-using FinanceBot.Domain.Entities;
+using FinanceBot.Domain.Expenses;
 
-namespace FinanceBot.Application.Abstractions;
+namespace FinanceBot.Application.Compras;
 
 public interface ICompraRepository
 {

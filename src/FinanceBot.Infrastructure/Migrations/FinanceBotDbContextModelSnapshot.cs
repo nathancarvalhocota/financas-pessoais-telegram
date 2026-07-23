@@ -22,7 +22,7 @@ namespace FinanceBot.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("FinanceBot.Domain.Entities.Compra", b =>
+            modelBuilder.Entity("FinanceBot.Domain.Expenses.Compra", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -56,7 +56,7 @@ namespace FinanceBot.Infrastructure.Migrations
                     b.ToTable("compras", (string)null);
                 });
 
-            modelBuilder.Entity("FinanceBot.Domain.Entities.LimiteCategoria", b =>
+            modelBuilder.Entity("FinanceBot.Domain.CategoryLimits.LimiteCategoria", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()

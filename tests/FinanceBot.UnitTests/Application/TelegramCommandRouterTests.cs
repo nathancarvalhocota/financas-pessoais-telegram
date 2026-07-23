@@ -1,7 +1,9 @@
-using FinanceBot.Application.Abstractions;
-using FinanceBot.Application.UseCases;
-using FinanceBot.Domain.Entities;
-using FinanceBot.Domain.Enums;
+using FinanceBot.Application.Compras;
+using FinanceBot.Application.Limites;
+using FinanceBot.Application.Commands;
+using FinanceBot.Domain.Categories;
+using FinanceBot.Domain.CategoryLimits;
+using FinanceBot.Domain.Expenses;
 using Xunit;
 
 namespace FinanceBot.UnitTests.Application;
@@ -16,7 +18,7 @@ public sealed class TelegramCommandRouterTests
             inMemoryCompraRepository,
             new InMemoryLimiteCategoriaRepository());
 
-        string response = await telegramCommandRouter.RouteAsync(
+        string response = await telegramCommandRouter.RouteMessageAsync(
             "/compra 200, teste, teste",
             DateTimeOffset.UtcNow,
             CancellationToken.None);
@@ -35,7 +37,7 @@ public sealed class TelegramCommandRouterTests
             inMemoryCompraRepository,
             new InMemoryLimiteCategoriaRepository());
 
-        string response = await telegramCommandRouter.RouteAsync(
+        string response = await telegramCommandRouter.RouteMessageAsync(
             "/compra@FinanceBot 200, teste, teste",
             DateTimeOffset.UtcNow,
             CancellationToken.None);
@@ -53,7 +55,7 @@ public sealed class TelegramCommandRouterTests
             new InMemoryCompraRepository(),
             limiteRepository);
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/limite Mercado 800",
             DateTimeOffset.UtcNow,
             CancellationToken.None);
@@ -71,10 +73,10 @@ public sealed class TelegramCommandRouterTests
             limiteRepository);
 
         // Define primeiro
-        await router.RouteAsync("/limite Mercado 800", DateTimeOffset.UtcNow, CancellationToken.None);
+        await router.RouteMessageAsync("/limite Mercado 800", DateTimeOffset.UtcNow, CancellationToken.None);
 
         // Remove
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/limite Mercado 0",
             DateTimeOffset.UtcNow,
             CancellationToken.None);
@@ -93,7 +95,7 @@ public sealed class TelegramCommandRouterTests
             new InMemoryCompraRepository(),
             new InMemoryLimiteCategoriaRepository());
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/limite categoriaInexistente 100",
             DateTimeOffset.UtcNow,
             CancellationToken.None);
@@ -110,10 +112,10 @@ public sealed class TelegramCommandRouterTests
         TelegramCommandRouter router = new TelegramCommandRouter(compraRepository, limiteRepository);
 
         // Define limite
-        await router.RouteAsync("/limite Mercado 800", DateTimeOffset.UtcNow, CancellationToken.None);
+        await router.RouteMessageAsync("/limite Mercado 800", DateTimeOffset.UtcNow, CancellationToken.None);
 
         // Registra compra de R$ 340
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/compra 340, Pao, Mercado",
             DateTimeOffset.UtcNow,
             CancellationToken.None);
@@ -133,13 +135,13 @@ public sealed class TelegramCommandRouterTests
         DateTimeOffset now = DateTimeOffset.UtcNow;
 
         // Define limite R$ 800
-        await router.RouteAsync("/limite Mercado 800", now, CancellationToken.None);
+        await router.RouteMessageAsync("/limite Mercado 800", now, CancellationToken.None);
 
         // Registra compra prévia de R$ 770
-        await router.RouteAsync("/compra 770, Compras anteriores, Mercado", now, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 770, Compras anteriores, Mercado", now, CancellationToken.None);
 
         // Registra compra que ultrapassa (770 + 50 = 820 > 800)
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/compra 50, Extra, Mercado",
             now,
             CancellationToken.None);
@@ -156,7 +158,7 @@ public sealed class TelegramCommandRouterTests
             new InMemoryCompraRepository(),
             new InMemoryLimiteCategoriaRepository());
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/compra 50, Cafe, Mercado",
             DateTimeOffset.UtcNow,
             CancellationToken.None);
@@ -177,10 +179,10 @@ public sealed class TelegramCommandRouterTests
             compraRepository,
             new InMemoryLimiteCategoriaRepository());
 
-        await router.RouteAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
-        await router.RouteAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/listar 04/26 Mercado",
             AbrilDeVinteSeis,
             CancellationToken.None);
@@ -198,10 +200,10 @@ public sealed class TelegramCommandRouterTests
             compraRepository,
             new InMemoryLimiteCategoriaRepository());
 
-        await router.RouteAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
-        await router.RouteAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/listar Mercado",
             AbrilDeVinteSeis,
             CancellationToken.None);
@@ -217,7 +219,7 @@ public sealed class TelegramCommandRouterTests
             new InMemoryCompraRepository(),
             new InMemoryLimiteCategoriaRepository());
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/listar 04/26 categoriaInexistente",
             AbrilDeVinteSeis,
             CancellationToken.None);
@@ -234,9 +236,9 @@ public sealed class TelegramCommandRouterTests
             compraRepository,
             new InMemoryLimiteCategoriaRepository());
 
-        await router.RouteAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/listar 04/26 Lazer",
             AbrilDeVinteSeis,
             CancellationToken.None);
@@ -252,10 +254,10 @@ public sealed class TelegramCommandRouterTests
             compraRepository,
             new InMemoryLimiteCategoriaRepository());
 
-        await router.RouteAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
-        await router.RouteAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/listar 04/26 sem Lazer",
             AbrilDeVinteSeis,
             CancellationToken.None);
@@ -272,7 +274,7 @@ public sealed class TelegramCommandRouterTests
             new InMemoryCompraRepository(),
             new InMemoryLimiteCategoriaRepository());
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/listar 04/26 sem",
             AbrilDeVinteSeis,
             CancellationToken.None);
@@ -288,9 +290,9 @@ public sealed class TelegramCommandRouterTests
             compraRepository,
             new InMemoryLimiteCategoriaRepository());
 
-        await router.RouteAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/listar 04/26 sem Lazer",
             AbrilDeVinteSeis,
             CancellationToken.None);
@@ -305,7 +307,7 @@ public sealed class TelegramCommandRouterTests
             new InMemoryCompraRepository(),
             new InMemoryLimiteCategoriaRepository());
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/info",
             AbrilDeVinteSeis,
             CancellationToken.None);
@@ -323,10 +325,10 @@ public sealed class TelegramCommandRouterTests
             compraRepository,
             new InMemoryLimiteCategoriaRepository());
 
-        await router.RouteAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
-        await router.RouteAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/listar 04/26",
             AbrilDeVinteSeis,
             CancellationToken.None);
@@ -345,11 +347,11 @@ public sealed class TelegramCommandRouterTests
             compraRepository,
             new InMemoryLimiteCategoriaRepository());
 
-        await router.RouteAsync("/compra 10, Primeiro, Mercado", new DateTimeOffset(2026, 2, 10, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
-        await router.RouteAsync("/compra 20, Segundo, Uber", new DateTimeOffset(2026, 2, 20, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
-        await router.RouteAsync("/compra 30, Fora, Lazer", new DateTimeOffset(2026, 2, 21, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
+        await router.RouteMessageAsync("/compra 10, Primeiro, Mercado", new DateTimeOffset(2026, 2, 10, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
+        await router.RouteMessageAsync("/compra 20, Segundo, Uber", new DateTimeOffset(2026, 2, 20, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
+        await router.RouteMessageAsync("/compra 30, Fora, Lazer", new DateTimeOffset(2026, 2, 21, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/listar 10/02/26 - 20/02/2026",
             new DateTimeOffset(2026, 2, 20, 12, 0, 0, TimeSpan.Zero),
             CancellationToken.None);
@@ -368,7 +370,7 @@ public sealed class TelegramCommandRouterTests
             new InMemoryCompraRepository(),
             new InMemoryLimiteCategoriaRepository());
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/listar 20/02/26 - 10/02/2026",
             AbrilDeVinteSeis,
             CancellationToken.None);
@@ -387,10 +389,10 @@ public sealed class TelegramCommandRouterTests
         DateTimeOffset previousCycleDate = new DateTimeOffset(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);
         DateTimeOffset currentCycleDate = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
 
-        await router.RouteAsync("/compra 60, Mercado anterior, Mercado", previousCycleDate, CancellationToken.None);
-        await router.RouteAsync("/compra 40, Uber anterior, Uber", previousCycleDate, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 60, Mercado anterior, Mercado", previousCycleDate, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 40, Uber anterior, Uber", previousCycleDate, CancellationToken.None);
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/compra 130, Mercado atual, Mercado",
             currentCycleDate,
             CancellationToken.None);
@@ -413,9 +415,9 @@ public sealed class TelegramCommandRouterTests
         DateTimeOffset previousCycleDate = new DateTimeOffset(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);
         DateTimeOffset currentCycleDate = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
 
-        await router.RouteAsync("/compra 100, Base anterior, Mercado", previousCycleDate, CancellationToken.None);
-        string dangerResponse = await router.RouteAsync("/compra 150, Danger, Mercado", currentCycleDate, CancellationToken.None);
-        string laterResponse = await router.RouteAsync("/compra 10, Depois, Mercado", currentCycleDate, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 100, Base anterior, Mercado", previousCycleDate, CancellationToken.None);
+        string dangerResponse = await router.RouteMessageAsync("/compra 150, Danger, Mercado", currentCycleDate, CancellationToken.None);
+        string laterResponse = await router.RouteMessageAsync("/compra 10, Depois, Mercado", currentCycleDate, CancellationToken.None);
 
         Assert.Contains("ALERTA VERMELHO", dangerResponse);
         Assert.DoesNotContain("ALERTA", laterResponse);
@@ -432,10 +434,10 @@ public sealed class TelegramCommandRouterTests
         DateTimeOffset previousCycleDate = new DateTimeOffset(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);
         DateTimeOffset currentCycleDate = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
 
-        await router.RouteAsync("/compra 100, Base anterior, Mercado", previousCycleDate, CancellationToken.None);
-        await router.RouteAsync("/compra 150, Alerta vermelho, Mercado", currentCycleDate, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 100, Base anterior, Mercado", previousCycleDate, CancellationToken.None);
+        await router.RouteMessageAsync("/compra 150, Alerta vermelho, Mercado", currentCycleDate, CancellationToken.None);
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/compra 50, Alerta urgente, Mercado",
             currentCycleDate,
             CancellationToken.None);
@@ -453,12 +455,12 @@ public sealed class TelegramCommandRouterTests
             new InMemoryLimiteCategoriaRepository());
 
         DateTimeOffset elevenPmInSaoPauloAsUtc = new DateTimeOffset(2026, 7, 15, 2, 0, 0, TimeSpan.Zero);
-        await router.RouteAsync(
+        await router.RouteMessageAsync(
             "/compra 120, Uber mes, Uber",
             elevenPmInSaoPauloAsUtc,
             CancellationToken.None);
 
-        string response = await router.RouteAsync(
+        string response = await router.RouteMessageAsync(
             "/listar 06/26",
             elevenPmInSaoPauloAsUtc,
             CancellationToken.None);

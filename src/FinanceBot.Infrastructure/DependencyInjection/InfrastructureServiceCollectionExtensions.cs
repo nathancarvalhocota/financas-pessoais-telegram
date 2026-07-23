@@ -1,7 +1,7 @@
-using FinanceBot.Application.Abstractions;
+using FinanceBot.Application.Compras;
+using FinanceBot.Application.Limites;
 using FinanceBot.Infrastructure.Persistence;
 using FinanceBot.Infrastructure.Repositories;
-using FinanceBot.Infrastructure.Telegram;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
@@ -28,9 +28,6 @@ public static class InfrastructureServiceCollectionExtensions
             options.UseNpgsql(connectionString);
         });
 
-        services.Configure<TelegramOptions>(
-            configuration.GetSection(TelegramOptions.SectionName));
-        services.AddHttpClient<ITelegramMessageSender, TelegramMessageSender>();
         services.AddScoped<ICompraRepository, CompraRepository>();
         services.AddScoped<ILimiteCategoriaRepository, LimiteCategoriaRepository>();
 
