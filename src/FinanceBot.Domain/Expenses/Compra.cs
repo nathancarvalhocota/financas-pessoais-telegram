@@ -1,6 +1,6 @@
-using FinanceBot.Domain.Enums;
+using FinanceBot.Domain.Categories;
 
-namespace FinanceBot.Domain.Entities;
+namespace FinanceBot.Domain.Expenses;
 
 public sealed class Compra
 {

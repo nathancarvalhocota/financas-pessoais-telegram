@@ -1,4 +1,5 @@
-using FinanceBot.Domain.Entities;
+using FinanceBot.Domain.CategoryLimits;
+using FinanceBot.Domain.Expenses;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

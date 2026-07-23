@@ -1,9 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
-using FinanceBot.Api.Endpoints.Contracts;
-using FinanceBot.Application.Abstractions;
-using FinanceBot.Domain.Entities;
-using FinanceBot.Domain.Enums;
+using System.Text.Json;
+using FinanceBot.Api.Telegram;
+using FinanceBot.Domain.Categories;
+using FinanceBot.Domain.Expenses;
 using FinanceBot.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace FinanceBot.IntegrationTests.Api;
@@ -41,7 +42,7 @@ public sealed class TelegramWebhookEndpointTests
 
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
         SentTelegramMessage sentTelegramMessage = Assert.Single(
-            financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
+            financeBotApiFactory.RecordingTelegramMessageHandler.SentMessages);
         Assert.Equal(998877, sentTelegramMessage.ChatId);
         Assert.Equal(
             "FinanceBot online. Use /info para ver todos os comandos.",
@@ -71,7 +72,7 @@ public sealed class TelegramWebhookEndpointTests
             webhookRequest);
 
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
-        Assert.Empty(financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
+        Assert.Empty(financeBotApiFactory.RecordingTelegramMessageHandler.SentMessages);
     }
 
     [Fact]
@@ -99,7 +100,7 @@ public sealed class TelegramWebhookEndpointTests
 
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
         SentTelegramMessage sentTelegramMessage = Assert.Single(
-            financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
+            financeBotApiFactory.RecordingTelegramMessageHandler.SentMessages);
         Assert.Contains("Compra registrada: R$ 58,90", sentTelegramMessage.Text);
         Assert.Contains("Mercado", sentTelegramMessage.Text);
 
@@ -137,7 +138,7 @@ public sealed class TelegramWebhookEndpointTests
 
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
         SentTelegramMessage sentTelegramMessage = Assert.Single(
-            financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
+            financeBotApiFactory.RecordingTelegramMessageHandler.SentMessages);
         Assert.Contains("Categoria 'teste' inexistente.", sentTelegramMessage.Text);
         Assert.Contains("Categorias disponiveis:", sentTelegramMessage.Text);
         Assert.Contains("Mercado", sentTelegramMessage.Text);
@@ -196,7 +197,7 @@ public sealed class TelegramWebhookEndpointTests
 
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
         SentTelegramMessage sentTelegramMessage = Assert.Single(
-            financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
+            financeBotApiFactory.RecordingTelegramMessageHandler.SentMessages);
         Assert.Contains("Compras de 15/01 a 14/02", sentTelegramMessage.Text);
         Assert.Contains("Almoco", sentTelegramMessage.Text);
         Assert.Contains("Lanche", sentTelegramMessage.Text);
@@ -244,7 +245,7 @@ public sealed class TelegramWebhookEndpointTests
 
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
         SentTelegramMessage sentTelegramMessage = Assert.Single(
-            financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
+            financeBotApiFactory.RecordingTelegramMessageHandler.SentMessages);
         Assert.Contains("Compra removida: R$ 33,50", sentTelegramMessage.Text);
         Assert.Contains("Uber para trabalho", sentTelegramMessage.Text);
 
@@ -273,7 +274,7 @@ public sealed class TelegramWebhookEndpointTests
             webhookRequest);
 
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
-        Assert.Empty(financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
+        Assert.Empty(financeBotApiFactory.RecordingTelegramMessageHandler.SentMessages);
     }
 
     [Fact]
@@ -300,7 +301,7 @@ public sealed class TelegramWebhookEndpointTests
             webhookRequest);
 
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
-        Assert.Empty(financeBotApiFactory.RecordingTelegramMessageSender.SentMessages);
+        Assert.Empty(financeBotApiFactory.RecordingTelegramMessageHandler.SentMessages);
 
         using IServiceScope serviceScope = financeBotApiFactory.Services.CreateScope();
         FinanceBotDbContext financeBotDbContext = serviceScope.ServiceProvider.GetRequiredService<
@@ -320,11 +321,13 @@ public sealed class TelegramWebhookEndpointTests
 
         private string DatabaseName { get; }
 
-        public RecordingTelegramMessageSender RecordingTelegramMessageSender { get; } =
-            new RecordingTelegramMessageSender();
+        public RecordingTelegramMessageHandler RecordingTelegramMessageHandler { get; } =
+            new RecordingTelegramMessageHandler();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
+            builder.ConfigureLogging(logging => logging.ClearProviders());
+
             Dictionary<string, string?> testConfiguration = new Dictionary<string, string?>
             {
                 ["Telegram:BotToken"] = "test-token",
@@ -351,21 +354,29 @@ public sealed class TelegramWebhookEndpointTests
                     options.UseInMemoryDatabase(DatabaseName);
                 });
 
-                services.RemoveAll<ITelegramMessageSender>();
-                services.AddSingleton<ITelegramMessageSender>(RecordingTelegramMessageSender);
+                services.RemoveAll<TelegramMessageSender>();
+                services.AddHttpClient<TelegramMessageSender>()
+                    .ConfigurePrimaryHttpMessageHandler(() => RecordingTelegramMessageHandler);
             });
         }
     }
 
-    private sealed class RecordingTelegramMessageSender : ITelegramMessageSender
+    private sealed class RecordingTelegramMessageHandler : HttpMessageHandler
     {
         public List<SentTelegramMessage> SentMessages { get; } = new List<SentTelegramMessage>();
 
-        public Task SendMessageAsync(long chatId, string text, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
         {
-            SentTelegramMessage sentTelegramMessage = new SentTelegramMessage(chatId, text);
+            string requestContent = await request.Content!.ReadAsStringAsync(cancellationToken);
+            using JsonDocument document = JsonDocument.Parse(requestContent);
+            JsonElement payload = document.RootElement;
+            SentTelegramMessage sentTelegramMessage = new SentTelegramMessage(
+                payload.GetProperty("chat_id").GetInt64(),
+                payload.GetProperty("text").GetString() ?? string.Empty);
             SentMessages.Add(sentTelegramMessage);
-            return Task.CompletedTask;
+            return new HttpResponseMessage(HttpStatusCode.OK);
         }
     }
 

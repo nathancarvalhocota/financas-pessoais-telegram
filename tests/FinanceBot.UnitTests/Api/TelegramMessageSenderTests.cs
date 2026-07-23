@@ -1,12 +1,12 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using FinanceBot.Infrastructure.Telegram;
+using FinanceBot.Api.Telegram;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
 
-namespace FinanceBot.UnitTests.Infrastructure;
+namespace FinanceBot.UnitTests.Api;
 
 public sealed class TelegramMessageSenderTests
 {

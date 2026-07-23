@@ -1,4 +1,4 @@
-namespace FinanceBot.Domain.Enums;
+namespace FinanceBot.Domain.Categories;
 
 public enum Categoria
 {

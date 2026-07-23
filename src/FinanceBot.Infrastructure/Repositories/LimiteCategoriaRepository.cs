@@ -1,6 +1,6 @@
-using FinanceBot.Application.Abstractions;
-using FinanceBot.Domain.Entities;
-using FinanceBot.Domain.Enums;
+using FinanceBot.Application.Limites;
+using FinanceBot.Domain.Categories;
+using FinanceBot.Domain.CategoryLimits;
 using FinanceBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 

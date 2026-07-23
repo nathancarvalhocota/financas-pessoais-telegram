@@ -1,5 +1,5 @@
-using FinanceBot.Application.Abstractions;
-using FinanceBot.Domain.Entities;
+using FinanceBot.Application.Compras;
+using FinanceBot.Domain.Expenses;
 using FinanceBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
