@@ -23,9 +23,6 @@ internal static class TelegramCommandMessages
         "/deletar <ID>\n" +
         "Remove uma compra pelo ID exibido no /listar.\n" +
         "Ex: /deletar 42\n\n" +
-        "/analise <MM/AA>\n" +
-        "Exibe total gasto, breakdown por categoria e comparação com mês anterior.\n" +
-        "Ex: /analise 04/26\n\n" +
         "/limite <CATEGORIA> <VALOR>\n" +
         "Define um limite mensal de gastos para a categoria.\n" +
         "Use valor 0 para remover o limite.\n" +

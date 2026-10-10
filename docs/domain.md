@@ -1,0 +1,29 @@
+# Regras de domínio
+
+Este documento reúne as regras financeiras compartilhadas pelos comandos. Formatos e exemplos de uso ficam em [`commands.md`](commands.md).
+
+## Compra e categoria
+
+Uma compra (`Compra`) registra valor, descrição, categoria e data. A API usa `message.date` como instante da compra; quando a data não vem no update, usa a hora UTC atual. O instante é persistido em UTC.
+
+As categorias válidas são `Educacao`, `Lazer`, `Lanches`, `Uber`, `Mercado`, `Moto`, `Compras`, `Outros`, `Estetica`, `Limpeza` e `Saude`. O código normaliza o texto de entrada removendo acentos, espaços, pontuação e diferenças entre maiúsculas e minúsculas. Essa normalização não cria sinônimos para as categorias.
+
+## Ciclo de faturamento e datas
+
+O ciclo começa no dia 15 e termina no dia 14 do mês seguinte. A regra usa a data de negócio no fuso `America/Sao_Paulo`.
+
+Em `/listar MM/YY`, `MM/YY` indica o mês em que o ciclo começa: `/listar 04/26` corresponde a 15/04/2026 até 14/05/2026. Sem período explícito, `/listar` usa a data da mensagem para escolher o ciclo. Em `/limite`, o ciclo atual é calculado a partir do relógio da aplicação.
+
+Filtros com datas explícitas aceitam os dois dias informados. Os limites de data são convertidos do calendário de São Paulo para UTC antes da consulta.
+
+## Limites por categoria
+
+Há no máximo um limite por categoria. Um valor positivo define ou atualiza o limite; `0` remove o existente. A consulta e o progresso após uma compra usam os gastos daquela categoria no ciclo corrente.
+
+O limite é ultrapassado quando o total gasto é maior que o limite. Atingir exatamente o valor definido ainda não conta como ultrapassagem.
+
+## Alertas de gasto
+
+Após registrar uma compra, o código compara o total do ciclo atual com o total do ciclo anterior completo. Ele considera os limiares de 125%, 150% e 200%, e emite o nível mais alto cruzado por aquela compra. Sem gasto positivo no ciclo anterior, não há base para alerta.
+
+Os alertas são calculados a partir dos totais antes e depois da compra. O sistema não persiste um estado de alertas já enviados.
