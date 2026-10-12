@@ -54,7 +54,7 @@ public sealed class ExpenseListQueryParserTests
         CategoryFilter filter = ParseSuccess(text).CategoryFilter;
 
         Assert.Equal(mode, filter.Mode);
-        Assert.Equal(new[] { Categoria.Mercado, Categoria.Saude, Categoria.Mercado }, filter.Categories);
+        Assert.Equal(new[] { Category.Mercado, Category.Saude, Category.Mercado }, filter.Categories);
     }
 
     [Theory]

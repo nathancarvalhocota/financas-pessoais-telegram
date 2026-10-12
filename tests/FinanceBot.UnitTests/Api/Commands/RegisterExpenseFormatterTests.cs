@@ -9,7 +9,7 @@ namespace FinanceBot.UnitTests.Api.Commands;
 
 public sealed class RegisterExpenseFormatterTests
 {
-    private static readonly ExpenseItem Expense = new(42, 130, "Compra", Categoria.Mercado, new DateTime(2026, 4, 20, 12, 0, 0, DateTimeKind.Utc));
+    private static readonly ExpenseItem Expense = new(42, 130, "Compra", Category.Mercado, new DateTime(2026, 4, 20, 12, 0, 0, DateTimeKind.Utc));
 
     [Fact]
     public void Format_WithoutLimitOrAlert_PreservesConfirmation()
@@ -23,7 +23,7 @@ public sealed class RegisterExpenseFormatterTests
     [InlineData(100, 130, true, "⚠ Limite de Mercado ultrapassado: R$ 130,00 de R$ 100,00")]
     public void Format_WithProgress_PreservesEqualityAndExceedingMessages(double limit, int percentage, bool exceeded, string expected)
     {
-        var progress = new CategoryLimitProgress(Categoria.Mercado, limit, 130, percentage, exceeded);
+        var progress = new CategoryLimitProgress(Category.Mercado, limit, 130, percentage, exceeded);
 
         Assert.Equal("Compra registrada: R$ 130,00 - Mercado\n" + expected,
             RegisterExpenseFormatter.Format(new RegisterExpenseResult.Success(Expense, progress, null)));
@@ -47,16 +47,16 @@ public sealed class RegisterExpenseFormatterTests
     {
         var categories = CategoryCatalog.GetAll().Select(category => category switch
         {
-            Categoria.Mercado => new CategorySpendingComparison(category, 130, 60, new SpendingComparison.Comparable(217, 70)),
-            Categoria.Uber => new CategorySpendingComparison(category, 0, 40, new SpendingComparison.Comparable(0, -40)),
-            Categoria.Lazer => new CategorySpendingComparison(category, 10, 0, new SpendingComparison.NoHistory()),
+            Category.Mercado => new CategorySpendingComparison(category, 130, 60, new SpendingComparison.Comparable(217, 70)),
+            Category.Uber => new CategorySpendingComparison(category, 0, 40, new SpendingComparison.Comparable(0, -40)),
+            Category.Lazer => new CategorySpendingComparison(category, 10, 0, new SpendingComparison.NoHistory()),
             _ => new CategorySpendingComparison(category, 0, 0, new SpendingComparison.NoSpending())
         }).ToList();
         var alert = new SpendingPaceAlert(SpendingAlertLevel.Warning,
             new BillingCycle(new DateOnly(2026, 4, 15), new DateOnly(2026, 5, 14)),
             new BillingCycle(new DateOnly(2026, 3, 15), new DateOnly(2026, 4, 14)),
             140, 100, 140, 40, categories);
-        var progress = new CategoryLimitProgress(Categoria.Mercado, 100, 130, 130, true);
+        var progress = new CategoryLimitProgress(Category.Mercado, 100, 130, 130, true);
         string expectedAlert = string.Join(Environment.NewLine, new[]
         {
             "⚠️ ALERTA AMARELO: gasto do ciclo acima do anterior",

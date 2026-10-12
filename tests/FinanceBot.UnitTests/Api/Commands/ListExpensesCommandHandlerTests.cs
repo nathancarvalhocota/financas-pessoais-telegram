@@ -19,10 +19,10 @@ public sealed class ListExpensesCommandHandlerTests
     {
         var repository = new ExpenseRepository();
         repository.Items.AddRange([
-            Expense(4, 25, Categoria.Uber, "2026-05-15T02:59:59Z"),
-            Expense(3, 10, Categoria.Lazer, "2026-04-18T14:00:00Z"),
-            Expense(2, 20, Categoria.Mercado, "2026-04-16T12:00:00Z"),
-            Expense(1, 10, Categoria.Mercado, "2026-04-15T03:00:00Z")]);
+            CreateExpense(4, 25, Category.Uber, "2026-05-15T02:59:59Z"),
+            CreateExpense(3, 10, Category.Lazer, "2026-04-18T14:00:00Z"),
+            CreateExpense(2, 20, Category.Mercado, "2026-04-16T12:00:00Z"),
+            CreateExpense(1, 10, Category.Mercado, "2026-04-15T03:00:00Z")]);
         using var cancellation = new CancellationTokenSource();
 
         var result = Assert.IsType<ListExpensesResult.Success>(await new ListExpensesCommandHandler(repository)
@@ -32,7 +32,7 @@ public sealed class ListExpensesCommandHandlerTests
         Assert.Equal(mode, result.Filter.Mode);
         Assert.Equal(total, result.Total);
         Assert.Equal(expectedIds, result.Items.Select(item => item.Id));
-        Assert.Equal(new ExpenseItem(4, 25, "Compra 4", Categoria.Uber, DateTime.Parse("2026-05-15T02:59:59Z").ToUniversalTime()), result.Items[0]);
+        Assert.Equal(new ExpenseItem(4, 25, "Compra 4", Category.Uber, DateTime.Parse("2026-05-15T02:59:59Z").ToUniversalTime()), result.Items[0]);
         Assert.Equal((DateTimeOffset.Parse("2026-04-15T03:00:00Z").UtcDateTime,
             DateTimeOffset.Parse("2026-05-15T03:00:00Z").UtcDateTime, cancellation.Token), Assert.Single(repository.Queries));
         Assert.Equal(4, repository.Items.Count);
@@ -49,10 +49,10 @@ public sealed class ListExpensesCommandHandlerTests
         DateTime startUtc = DateTimeOffset.Parse(start).UtcDateTime;
         DateTime endUtc = DateTimeOffset.Parse(end).UtcDateTime;
         repository.Items.AddRange([
-            Expense(4, 40, Categoria.Mercado, endUtc),
-            Expense(3, 30, Categoria.Mercado, endUtc.AddTicks(-1)),
-            Expense(2, 20, Categoria.Mercado, startUtc),
-            Expense(1, 10, Categoria.Mercado, startUtc.AddTicks(-1))]);
+            CreateExpense(4, 40, Category.Mercado, endUtc),
+            CreateExpense(3, 30, Category.Mercado, endUtc.AddTicks(-1)),
+            CreateExpense(2, 20, Category.Mercado, startUtc),
+            CreateExpense(1, 10, Category.Mercado, startUtc.AddTicks(-1))]);
 
         var result = Assert.IsType<ListExpensesResult.Success>(await new ListExpensesCommandHandler(repository)
             .HandleListExpensesAsync(text, DateTimeOffset.Parse(messageDate), CancellationToken.None));
@@ -69,7 +69,7 @@ public sealed class ListExpensesCommandHandlerTests
     public async Task Handle_EmptyList_IsSuccessWithPeriodFilterAndZeroTotal(string text, bool seed, CategoryFilterMode mode)
     {
         var repository = new ExpenseRepository();
-        if (seed) repository.Items.Add(Expense(1, 10, Categoria.Mercado, "2026-04-20T12:00:00Z"));
+        if (seed) repository.Items.Add(CreateExpense(1, 10, Category.Mercado, "2026-04-20T12:00:00Z"));
 
         var result = Assert.IsType<ListExpensesResult.Success>(await new ListExpensesCommandHandler(repository)
             .HandleListExpensesAsync(text, MessageDate, CancellationToken.None));
@@ -117,31 +117,31 @@ public sealed class ListExpensesCommandHandlerTests
         Assert.Equal(cancellation.Token, Assert.Single(repository.Queries).Token);
     }
 
-    private static Compra Expense(int id, double amount, Categoria category, string date) =>
-        Expense(id, amount, category, DateTimeOffset.Parse(date).UtcDateTime);
+    private static Expense CreateExpense(int id, double amount, Category category, string date) =>
+        CreateExpense(id, amount, category, DateTimeOffset.Parse(date).UtcDateTime);
 
-    private static Compra Expense(int id, double amount, Categoria category, DateTime date)
+    private static Expense CreateExpense(int id, double amount, Category category, DateTime date)
     {
-        Compra expense = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(amount, $"Compra {id}", category, date)).Compra;
-        typeof(Compra).GetProperty(nameof(Compra.Id))!.SetValue(expense, id);
+        Expense expense = Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(amount, $"Compra {id}", category, date)).Expense;
+        typeof(Expense).GetProperty(nameof(Expense.Id))!.SetValue(expense, id);
         return expense;
     }
 
-    private sealed class ExpenseRepository : ICompraRepository
+    private sealed class ExpenseRepository : IExpenseRepository
     {
-        public List<Compra> Items { get; } = new();
+        public List<Expense> Items { get; } = new();
         public List<(DateTime Start, DateTime EndExclusive, CancellationToken Token)> Queries { get; } = new();
         public Exception? Exception { get; init; }
 
-        public Task<IReadOnlyList<Compra>> ListByPeriodAsync(DateTime startUtc, DateTime endExclusiveUtc, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<Expense>> ListByPeriodAsync(DateTime startUtc, DateTime endExclusiveUtc, CancellationToken cancellationToken)
         {
             Queries.Add((startUtc, endExclusiveUtc, cancellationToken));
             if (Exception is not null) throw Exception;
-            return Task.FromResult<IReadOnlyList<Compra>>(Items.Where(item => item.Data >= startUtc && item.Data < endExclusiveUtc).ToList());
+            return Task.FromResult<IReadOnlyList<Expense>>(Items.Where(item => item.DateUtc >= startUtc && item.DateUtc < endExclusiveUtc).ToList());
         }
 
-        public Task AddAsync(Compra expense, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Compra?> FindByIdAsync(int id, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task DeleteAsync(Compra expense, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task AddAsync(Expense expense, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Expense?> FindByIdAsync(int id, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task DeleteAsync(Expense expense, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

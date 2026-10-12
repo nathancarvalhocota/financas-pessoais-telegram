@@ -30,11 +30,11 @@ public static class RegisterExpenseFormatter
         string response = $"Compra registrada: R$ {BrazilianCurrencyFormatter.FormatAmount(result.Expense.Amount)} - {category}";
         if (result.Progress is { } progress)
         {
-            string spending = BrazilianCurrencyFormatter.FormatAmount(progress.TotalGasto);
-            string limit = BrazilianCurrencyFormatter.FormatAmount(progress.Limite);
-            response += progress.Excedido
+            string spending = BrazilianCurrencyFormatter.FormatAmount(progress.TotalSpent);
+            string limit = BrazilianCurrencyFormatter.FormatAmount(progress.Limit);
+            response += progress.IsExceeded
                 ? $"\n⚠ Limite de {category} ultrapassado: R$ {spending} de R$ {limit}"
-                : $"\n{category}: R$ {spending} de R$ {limit} ({progress.Percentual}%)";
+                : $"\n{category}: R$ {spending} de R$ {limit} ({progress.Percentage}%)";
         }
 
         return result.Alert is { } alert ? $"{response}\n\n{FormatAlert(alert)}" : response;

@@ -12,10 +12,10 @@ public sealed class CategoryCatalogTests
     [InlineData("Mercádo")]
     public void TryParse_WithEquivalentText_ReturnsCategory(string text)
     {
-        bool parsed = CategoryCatalog.TryParse(text, out Categoria category);
+        bool parsed = CategoryCatalog.TryParse(text, out Category category);
 
         Assert.True(parsed);
-        Assert.Equal(Categoria.Mercado, category);
+        Assert.Equal(Category.Mercado, category);
     }
 
     [Fact]
@@ -29,6 +29,6 @@ public sealed class CategoryCatalogTests
     [Fact]
     public void GetDisplayName_ReturnsBusinessLabel()
     {
-        Assert.Equal("Saude", CategoryCatalog.GetDisplayName(Categoria.Saude));
+        Assert.Equal("Saude", CategoryCatalog.GetDisplayName(Category.Saude));
     }
 }

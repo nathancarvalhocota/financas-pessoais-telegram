@@ -11,9 +11,9 @@ public sealed class ListExpensesCommandHandler
         "^/listar(?:\\s+(.+))?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
-    private readonly ICompraRepository _expenseRepository;
+    private readonly IExpenseRepository _expenseRepository;
 
-    public ListExpensesCommandHandler(ICompraRepository expenseRepository)
+    public ListExpensesCommandHandler(IExpenseRepository expenseRepository)
     {
         _expenseRepository = expenseRepository;
     }
@@ -39,26 +39,26 @@ public sealed class ListExpensesCommandHandler
         }
 
         ExpenseListQuery query = ((ExpenseListQueryParseResult.Success)parseResult).Query;
-        IReadOnlyList<Compra> expenses = await _expenseRepository.ListByPeriodAsync(
+        IReadOnlyList<Expense> expenses = await _expenseRepository.ListByPeriodAsync(
             query.PeriodStartUtc,
             query.PeriodEndExclusiveUtc,
             cancellationToken);
 
         List<ExpenseItem> items = new();
         double total = 0;
-        foreach (Compra expense in expenses)
+        foreach (Expense expense in expenses)
         {
             bool included = query.CategoryFilter.Mode switch
             {
                 CategoryFilterMode.None => true,
-                CategoryFilterMode.Include => query.CategoryFilter.Categories.Contains(expense.Categoria),
-                CategoryFilterMode.Exclude => !query.CategoryFilter.Categories.Contains(expense.Categoria),
+                CategoryFilterMode.Include => query.CategoryFilter.Categories.Contains(expense.Category),
+                CategoryFilterMode.Exclude => !query.CategoryFilter.Categories.Contains(expense.Category),
                 _ => false
             };
             if (!included) continue;
 
             items.Add(ExpenseItem.From(expense));
-            total += expense.Valor;
+            total += expense.Amount;
         }
 
         return new ListExpensesResult.Success(query.Period, query.CategoryFilter, items, total);

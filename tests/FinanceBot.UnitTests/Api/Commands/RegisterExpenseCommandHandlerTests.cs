@@ -24,8 +24,8 @@ public sealed class RegisterExpenseCommandHandlerTests
         var result = Assert.IsType<RegisterExpenseResult.Success>(await handler.HandleRegisterExpenseAsync(
             "/compra 58,90,  Almoco  , Mercado", MessageDate, CancellationToken.None));
 
-        Compra saved = Assert.Single(repository.Items);
-        Assert.Equal(new ExpenseItem(saved.Id, 58.90, "Almoco", Categoria.Mercado, MessageDate.UtcDateTime), result.Expense);
+        Expense saved = Assert.Single(repository.Items);
+        Assert.Equal(new ExpenseItem(saved.Id, 58.90, "Almoco", Category.Mercado, MessageDate.UtcDateTime), result.Expense);
         Assert.True(result.Expense.Id > 0);
         Assert.Equal(DateTimeKind.Utc, result.Expense.DateUtc.Kind);
         Assert.Null(result.Progress);
@@ -37,8 +37,8 @@ public sealed class RegisterExpenseCommandHandlerTests
     {
         using var cancellation = new CancellationTokenSource();
         var repository = new Repositories { Limit = Limit(100) };
-        repository.Items.Add(Expense(100, Categoria.Mercado, PreviousStart));
-        repository.Items.Add(Expense(20, Categoria.Uber, CurrentStart));
+        repository.Items.Add(CreateExpense(100, Category.Mercado, PreviousStart));
+        repository.Items.Add(CreateExpense(20, Category.Uber, CurrentStart));
         var handler = new RegisterExpenseCommandHandler(repository, repository);
 
         var result = Assert.IsType<RegisterExpenseResult.Success>(await handler.HandleRegisterExpenseAsync(
@@ -47,7 +47,7 @@ public sealed class RegisterExpenseCommandHandlerTests
         Assert.Equal(new[] { "add", "limit", "current", "previous" }, repository.Operations);
         Assert.Equal(new[] { (CurrentStart, CurrentEnd), (PreviousStart, CurrentStart) }, repository.Periods);
         Assert.All(repository.Tokens, token => Assert.Equal(cancellation.Token, token));
-        Assert.Equal(new CategoryLimitProgress(Categoria.Mercado, 100, 130, 130, true), result.Progress);
+        Assert.Equal(new CategoryLimitProgress(Category.Mercado, 100, 130, 130, true), result.Progress);
         SpendingPaceAlert alert = Assert.IsType<SpendingPaceAlert>(result.Alert);
         Assert.Equal(SpendingAlertLevel.Danger, alert.Level);
         Assert.Equal(150, alert.CurrentTotal);
@@ -55,9 +55,9 @@ public sealed class RegisterExpenseCommandHandlerTests
         Assert.Equal(150, alert.Percentage);
         Assert.Equal(50, alert.Difference);
         Assert.Equal(CategoryCatalog.GetAll(), alert.Categories.Select(item => item.Category));
-        Assert.Equal(new SpendingComparison.Comparable(130, 30), alert.Categories.Single(item => item.Category == Categoria.Mercado).Comparison);
-        Assert.IsType<SpendingComparison.NoHistory>(alert.Categories.Single(item => item.Category == Categoria.Uber).Comparison);
-        Assert.IsType<SpendingComparison.NoSpending>(alert.Categories.Single(item => item.Category == Categoria.Saude).Comparison);
+        Assert.Equal(new SpendingComparison.Comparable(130, 30), alert.Categories.Single(item => item.Category == Category.Mercado).Comparison);
+        Assert.IsType<SpendingComparison.NoHistory>(alert.Categories.Single(item => item.Category == Category.Uber).Comparison);
+        Assert.IsType<SpendingComparison.NoSpending>(alert.Categories.Single(item => item.Category == Category.Saude).Comparison);
     }
 
     [Theory]
@@ -70,7 +70,7 @@ public sealed class RegisterExpenseCommandHandlerTests
         var result = Assert.IsType<RegisterExpenseResult.Success>(await new RegisterExpenseCommandHandler(repository, repository)
             .HandleRegisterExpenseAsync($"/compra {amount.ToString(System.Globalization.CultureInfo.InvariantCulture)}, Teste, Mercado", MessageDate, CancellationToken.None));
 
-        Assert.Equal(new CategoryLimitProgress(Categoria.Mercado, 100, amount, 100, exceeded), result.Progress);
+        Assert.Equal(new CategoryLimitProgress(Category.Mercado, 100, amount, 100, exceeded), result.Progress);
     }
 
     [Theory]
@@ -80,7 +80,7 @@ public sealed class RegisterExpenseCommandHandlerTests
     public async Task Handle_CrossingSeveralThresholds_ReturnsHighestAndDoesNotRepeat(double amount, SpendingAlertLevel expected)
     {
         var repository = new Repositories();
-        repository.Items.Add(Expense(100, Categoria.Mercado, PreviousStart));
+        repository.Items.Add(CreateExpense(100, Category.Mercado, PreviousStart));
         var handler = new RegisterExpenseCommandHandler(repository, repository);
 
         var result = Assert.IsType<RegisterExpenseResult.Success>(await handler.HandleRegisterExpenseAsync(
@@ -127,16 +127,16 @@ public sealed class RegisterExpenseCommandHandlerTests
         Assert.Equal(stage, repository.Operations.Last());
     }
 
-    private static Compra Expense(double amount, Categoria category, DateTime date) =>
-        Assert.IsType<CompraCreationResult.Success>(Compra.Criar(amount, "Base", category, date)).Compra;
+    private static Expense CreateExpense(double amount, Category category, DateTime date) =>
+        Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(amount, "Base", category, date)).Expense;
 
-    private static LimiteCategoria Limit(double amount) =>
-        Assert.IsType<LimiteCategoriaCreationResult.Success>(LimiteCategoria.Criar(Categoria.Mercado, amount)).Limite;
+    private static CategoryLimit Limit(double amount) =>
+        Assert.IsType<CategoryLimitCreationResult.Success>(CategoryLimit.Create(Category.Mercado, amount)).Limit;
 
-    private sealed class Repositories : ICompraRepository, ILimiteCategoriaRepository
+    private sealed class Repositories : IExpenseRepository, ICategoryLimitRepository
     {
-        public List<Compra> Items { get; } = new();
-        public LimiteCategoria? Limit { get; init; }
+        public List<Expense> Items { get; } = new();
+        public CategoryLimit? Limit { get; init; }
         public List<string> Operations { get; } = new();
         public List<CancellationToken> Tokens { get; } = new();
         public List<(DateTime, DateTime)> Periods { get; } = new();
@@ -150,30 +150,30 @@ public sealed class RegisterExpenseCommandHandlerTests
             if (FailStage == stage) throw Exception;
         }
 
-        public Task AddAsync(Compra expense, CancellationToken cancellationToken)
+        public Task AddAsync(Expense expense, CancellationToken cancellationToken)
         {
             Record("add", cancellationToken);
-            typeof(Compra).GetProperty(nameof(Compra.Id))!.SetValue(expense, Items.Count + 1);
+            typeof(Expense).GetProperty(nameof(Expense.Id))!.SetValue(expense, Items.Count + 1);
             Items.Add(expense);
             return Task.CompletedTask;
         }
 
-        public Task<LimiteCategoria?> GetByCategoryAsync(Categoria category, CancellationToken cancellationToken)
+        public Task<CategoryLimit?> GetByCategoryAsync(Category category, CancellationToken cancellationToken)
         {
             Record("limit", cancellationToken);
-            return Task.FromResult(Limit?.Categoria == category ? Limit : null);
+            return Task.FromResult(Limit?.Category == category ? Limit : null);
         }
 
-        public Task<IReadOnlyList<Compra>> ListByPeriodAsync(DateTime startUtc, DateTime endExclusiveUtc, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<Expense>> ListByPeriodAsync(DateTime startUtc, DateTime endExclusiveUtc, CancellationToken cancellationToken)
         {
             Record(startUtc == CurrentStart ? "current" : "previous", cancellationToken);
             Periods.Add((startUtc, endExclusiveUtc));
-            return Task.FromResult<IReadOnlyList<Compra>>(Items.Where(item => item.Data >= startUtc && item.Data < endExclusiveUtc).ToList());
+            return Task.FromResult<IReadOnlyList<Expense>>(Items.Where(item => item.DateUtc >= startUtc && item.DateUtc < endExclusiveUtc).ToList());
         }
 
-        public Task<Compra?> FindByIdAsync(int id, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task DeleteAsync(Compra expense, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task UpsertAsync(LimiteCategoria limit, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task DeleteAsync(LimiteCategoria limit, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Expense?> FindByIdAsync(int id, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task DeleteAsync(Expense expense, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task UpsertAsync(CategoryLimit limit, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task DeleteAsync(CategoryLimit limit, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

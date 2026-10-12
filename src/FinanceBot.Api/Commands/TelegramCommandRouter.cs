@@ -26,8 +26,8 @@ public sealed class TelegramCommandRouter
     }
 
     public TelegramCommandRouter(
-        ICompraRepository expenseRepository,
-        ILimiteCategoriaRepository categoryLimitRepository)
+        IExpenseRepository expenseRepository,
+        ICategoryLimitRepository categoryLimitRepository)
         : this(
             new RegisterExpenseCommandHandler(expenseRepository, categoryLimitRepository),
             new ListExpensesCommandHandler(expenseRepository),

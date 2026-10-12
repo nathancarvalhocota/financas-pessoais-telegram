@@ -5,47 +5,47 @@ namespace FinanceBot.Domain.Categories;
 
 public static class CategoryCatalog
 {
-    private static readonly Dictionary<string, Categoria> CategoriesByNormalizedText =
-        new Dictionary<string, Categoria>(StringComparer.Ordinal)
+    private static readonly Dictionary<string, Category> CategoriesByNormalizedText =
+        new Dictionary<string, Category>(StringComparer.Ordinal)
         {
-            ["educacao"] = Categoria.Educacao,
-            ["lazer"] = Categoria.Lazer,
-            ["lanches"] = Categoria.Lanches,
-            ["uber"] = Categoria.Uber,
-            ["mercado"] = Categoria.Mercado,
-            ["moto"] = Categoria.Moto,
-            ["compras"] = Categoria.Compras,
-            ["outros"] = Categoria.Outros,
-            ["estetica"] = Categoria.Estetica,
-            ["limpeza"] = Categoria.Limpeza,
-            ["saude"] = Categoria.Saude
+            ["educacao"] = Category.Educacao,
+            ["lazer"] = Category.Lazer,
+            ["lanches"] = Category.Lanches,
+            ["uber"] = Category.Uber,
+            ["mercado"] = Category.Mercado,
+            ["moto"] = Category.Moto,
+            ["compras"] = Category.Compras,
+            ["outros"] = Category.Outros,
+            ["estetica"] = Category.Estetica,
+            ["limpeza"] = Category.Limpeza,
+            ["saude"] = Category.Saude
         };
 
-    public static IReadOnlyList<Categoria> GetAll()
+    public static IReadOnlyList<Category> GetAll()
     {
-        return Enum.GetValues<Categoria>();
+        return Enum.GetValues<Category>();
     }
 
-    public static bool TryParse(string text, out Categoria category)
+    public static bool TryParse(string text, out Category category)
     {
         return CategoriesByNormalizedText.TryGetValue(Normalize(text), out category);
     }
 
-    public static string GetDisplayName(Categoria category)
+    public static string GetDisplayName(Category category)
     {
         return category switch
         {
-            Categoria.Educacao => "Educacao",
-            Categoria.Lazer => "Lazer",
-            Categoria.Lanches => "Lanches",
-            Categoria.Uber => "Uber",
-            Categoria.Mercado => "Mercado",
-            Categoria.Moto => "Moto",
-            Categoria.Compras => "Compras",
-            Categoria.Outros => "Outros",
-            Categoria.Estetica => "Estetica",
-            Categoria.Limpeza => "Limpeza",
-            Categoria.Saude => "Saude",
+            Category.Educacao => "Educacao",
+            Category.Lazer => "Lazer",
+            Category.Lanches => "Lanches",
+            Category.Uber => "Uber",
+            Category.Mercado => "Mercado",
+            Category.Moto => "Moto",
+            Category.Compras => "Compras",
+            Category.Outros => "Outros",
+            Category.Estetica => "Estetica",
+            Category.Limpeza => "Limpeza",
+            Category.Saude => "Saude",
             _ => category.ToString()
         };
     }

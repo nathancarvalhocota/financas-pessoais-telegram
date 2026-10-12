@@ -4,9 +4,9 @@ Este documento reúne as regras financeiras compartilhadas pelos comandos. Forma
 
 ## Compra e categoria
 
-Uma compra (`Compra`) registra valor, descrição, categoria e data. A API usa `message.date` como instante da compra; quando a data não vem no update, usa a hora UTC atual. O instante é persistido em UTC.
+Uma compra (`Expense`) registra valor, descrição, categoria e data. A API usa `message.date` como instante da compra; quando a data não vem no update, usa a hora UTC atual. O instante é persistido em UTC.
 
-`Compra.Criar` exige valor positivo e finito, descrição preenchida e categoria definida no enum. Falhas retornam `CompraError`, sem mensagens. Construtores e setters são privados; não há alteração pública que contorne essas regras. O parsing apara a descrição; a entidade não acrescenta regra de tamanho máximo. O limite de 255 caracteres já existente no mapeamento EF permanece. A materialização de registros legados preserva campos e IDs, inclusive dados que não passariam pela criação atual, sem limpeza ou nova migration.
+`Expense.Create` exige valor positivo e finito, descrição preenchida e categoria definida no enum. Falhas retornam `ExpenseError`, sem mensagens. Construtores e setters são privados; não há alteração pública que contorne essas regras. O parsing apara a descrição; a entidade não acrescenta regra de tamanho máximo. O limite de 255 caracteres já existente no mapeamento EF permanece. A materialização de registros legados preserva campos e IDs, inclusive dados que não passariam pela criação atual, sem limpeza ou nova migration.
 
 As categorias válidas são `Educacao`, `Lazer`, `Lanches`, `Uber`, `Mercado`, `Moto`, `Compras`, `Outros`, `Estetica`, `Limpeza` e `Saude`. O código normaliza o texto de entrada removendo acentos, espaços, pontuação e diferenças entre maiúsculas e minúsculas. Essa normalização não cria sinônimos para as categorias.
 
@@ -16,7 +16,7 @@ O ciclo começa no dia 15 e termina no dia 14 do mês seguinte. A regra usa a da
 
 Em `/listar MM/YY`, `MM/YY` indica o mês em que o ciclo começa: `/listar 04/26` corresponde a 15/04/2026 até 14/05/2026. Sem período explícito, `/listar` usa a data da mensagem para escolher o ciclo. Em `/limite`, o ciclo atual é calculado a partir do relógio da aplicação.
 
-Filtros com datas explícitas aceitam os dois dias informados. As consultas usam o intervalo UTC `[início, fim exclusivo)`: incluem compras com `Data >= início` e excluem aquelas com `Data >= fim exclusivo`. `DateTimeConverter` calcula o início do dia seguinte ao último dia no calendário de São Paulo e só então converte esse limite para UTC, respeitando mudanças históricas de offset. Não acrescenta um dia depois da conversão UTC.
+Filtros com datas explícitas aceitam os dois dias informados. As consultas usam o intervalo UTC `[início, fim exclusivo)`: incluem compras com `DateUtc >= início` e excluem aquelas com `DateUtc >= fim exclusivo`. `DateTimeConverter` calcula o início do dia seguinte ao último dia no calendário de São Paulo e só então converte esse limite para UTC, respeitando mudanças históricas de offset. Não acrescenta um dia depois da conversão UTC.
 
 No ciclo de 15/04 a 14/05, o fim exclusivo da consulta é o início de 15/05 em São Paulo. As datas apresentadas nos cabeçalhos e alertas continuam inclusivas. A listagem conserva a ordenação decrescente recebida do repositório e exibe o instante UTC de cada compra sem conversão para São Paulo: por exemplo, uma compra de 15/05/2026 às 02:59 UTC ainda pertence ao dia 14/05 no calendário de negócio e aparece como `15/05 02:59`.
 
@@ -24,11 +24,11 @@ No ciclo de 15/04 a 14/05, o fim exclusivo da consulta é o início de 15/05 em 
 
 Há no máximo um limite por categoria. Um valor positivo define ou atualiza o limite; `0` remove o existente. A consulta e o progresso após uma compra usam os gastos daquela categoria no ciclo corrente.
 
-`LimiteCategoria.Criar` exige categoria definida no enum e valor positivo e finito; zero, negativos, `NaN` e infinitos retornam erro tipado de domínio. A entidade não tem construtor nem setters públicos. `AlterarValor` valida categoria e novo valor antes de alterar e retorna erro tipado em caso de falha, preservando o estado anterior. Materializar um registro legado não limpa ou transforma seus dados. O handler interpreta zero como remoção, sem criar uma entidade com esse valor; remover um limite inexistente preserva a confirmação. Ausência de limite em uma consulta é um estado normal.
+`CategoryLimit.Create` exige categoria definida no enum e valor positivo e finito; zero, negativos, `NaN` e infinitos retornam erro tipado de domínio. A entidade não tem construtor nem setters públicos. `UpdateAmount` valida categoria e novo valor antes de alterar e retorna erro tipado em caso de falha, preservando o estado anterior. Materializar um registro legado não limpa ou transforma seus dados. O handler interpreta zero como remoção, sem criar uma entidade com esse valor; remover um limite inexistente preserva a confirmação. Ausência de limite em uma consulta é um estado normal.
 
 O limite é ultrapassado quando o total gasto é maior que o limite. Atingir exatamente o valor definido ainda não conta como ultrapassagem.
 
-`AvaliarProgresso(totalGasto)` é uma avaliação pura sobre o total fornecido, sem acesso a repositórios. Retorna categoria, limite, gasto, percentual inteiro e indicação de ultrapassagem. O percentual mantém `Math.Round(totalGasto / limite * 100)` com arredondamento de empate para o par. `/limite` e o registro de compra usam essa avaliação.
+`EvaluateProgress(totalSpent)` é uma avaliação pura sobre o total fornecido, sem acesso a repositórios. Retorna categoria, limite, gasto, percentual inteiro e indicação de ultrapassagem. O percentual mantém `Math.Round(totalSpent / amount * 100)` com arredondamento de empate para o par. `/limite` e o registro de compra usam essa avaliação.
 
 ## Alertas de gasto
 

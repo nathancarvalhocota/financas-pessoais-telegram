@@ -132,7 +132,7 @@ public static class ExpenseListQueryParser
         if (filterText.Length == 0)
         {
             return CategoryFilterParseResult.Success(
-                new CategoryFilter(CategoryFilterMode.None, Array.Empty<Categoria>()));
+                new CategoryFilter(CategoryFilterMode.None, Array.Empty<Category>()));
         }
 
         CategoryFilterMode filterMode = CategoryFilterMode.Include;
@@ -156,11 +156,11 @@ public static class ExpenseListQueryParser
             }
         }
 
-        List<Categoria> categories = new List<Categoria>();
+        List<Category> categories = new List<Category>();
         foreach (string rawCategory in categoriesText.Split(','))
         {
             string categoryText = rawCategory.Trim();
-            if (!CategoryCatalog.TryParse(categoryText, out Categoria category))
+            if (!CategoryCatalog.TryParse(categoryText, out Category category))
             {
                 return CategoryFilterParseResult.Failure(
                     new ListExpensesError.UnknownCategory(categoryText));

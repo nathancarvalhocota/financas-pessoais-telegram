@@ -8,7 +8,7 @@ using Xunit;
 
 namespace FinanceBot.IntegrationTests.Infrastructure;
 
-public sealed class CompraRepositoryTests
+public sealed class ExpenseRepositoryTests
 {
     [Fact]
     public async Task AddAndMaterializeInAnotherContext_PreservesIdentityAndAllFields()
@@ -19,27 +19,27 @@ public sealed class CompraRepositoryTests
         int id;
         await using (var context = new FinanceBotDbContext(options))
         {
-            Compra expense = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(58.90, "Almoco", Categoria.Mercado, date)).Compra;
-            await new CompraRepository(context).AddAsync(expense, CancellationToken.None);
+            Expense expense = Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(58.90, "Almoco", Category.Mercado, date)).Expense;
+            await new ExpenseRepository(context).AddAsync(expense, CancellationToken.None);
             id = expense.Id;
             Assert.True(id > 0);
         }
 
         await using (var context = new FinanceBotDbContext(options))
         {
-            var repository = new CompraRepository(context);
-            Compra expense = Assert.IsType<Compra>(await repository.FindByIdAsync(id, CancellationToken.None));
+            var repository = new ExpenseRepository(context);
+            Expense expense = Assert.IsType<Expense>(await repository.FindByIdAsync(id, CancellationToken.None));
             Assert.Equal(id, expense.Id);
-            Assert.Equal(58.90, expense.Valor);
-            Assert.Equal("Almoco", expense.Descricao);
-            Assert.Equal(Categoria.Mercado, expense.Categoria);
-            Assert.Equal(date, expense.Data);
-            Assert.Equal(DateTimeKind.Utc, expense.Data.Kind);
+            Assert.Equal(58.90, expense.Amount);
+            Assert.Equal("Almoco", expense.Description);
+            Assert.Equal(Category.Mercado, expense.Category);
+            Assert.Equal(date, expense.DateUtc);
+            Assert.Equal(DateTimeKind.Utc, expense.DateUtc.Kind);
             await repository.DeleteAsync(expense, CancellationToken.None);
         }
 
         await using var verify = new FinanceBotDbContext(options);
-        Assert.Empty(verify.Compras);
+        Assert.Empty(verify.Expenses);
     }
 
     [Fact]
@@ -50,21 +50,21 @@ public sealed class CompraRepositoryTests
         int id;
         await using (var context = new FinanceBotDbContext(options))
         {
-            Compra legacy = ExpenseAt(DateTime.UtcNow);
-            context.Compras.Add(legacy);
-            context.Entry(legacy).Property(item => item.Valor).CurrentValue = -1;
-            context.Entry(legacy).Property(item => item.Descricao).CurrentValue = "";
-            context.Entry(legacy).Property(item => item.Categoria).CurrentValue = (Categoria)999;
+            Expense legacy = ExpenseAt(DateTime.UtcNow);
+            context.Expenses.Add(legacy);
+            context.Entry(legacy).Property(item => item.Amount).CurrentValue = -1;
+            context.Entry(legacy).Property(item => item.Description).CurrentValue = "";
+            context.Entry(legacy).Property(item => item.Category).CurrentValue = (Category)999;
             await context.SaveChangesAsync();
             id = legacy.Id;
         }
 
         await using var read = new FinanceBotDbContext(options);
-        Compra materialized = Assert.IsType<Compra>(await new CompraRepository(read).FindByIdAsync(id, CancellationToken.None));
+        Expense materialized = Assert.IsType<Expense>(await new ExpenseRepository(read).FindByIdAsync(id, CancellationToken.None));
         Assert.Equal(id, materialized.Id);
-        Assert.Equal(-1, materialized.Valor);
-        Assert.Equal("", materialized.Descricao);
-        Assert.Equal((Categoria)999, materialized.Categoria);
+        Assert.Equal(-1, materialized.Amount);
+        Assert.Equal("", materialized.Description);
+        Assert.Equal((Category)999, materialized.Category);
         Assert.Equal(EntityState.Unchanged, read.Entry(materialized).State);
     }
 
@@ -74,25 +74,25 @@ public sealed class CompraRepositoryTests
         var options = new DbContextOptionsBuilder<FinanceBotDbContext>()
             .UseNpgsql("Host=localhost;Database=unused;Username=unused;Password=unused").Options;
         using var context = new FinanceBotDbContext(options);
-        IEntityType entity = context.Model.FindEntityType(typeof(Compra))!;
+        IEntityType entity = context.Model.FindEntityType(typeof(Expense))!;
         var table = StoreObjectIdentifier.Table("compras", null);
 
         Assert.Equal("compras", entity.GetTableName());
-        Assert.Equal(new[] { nameof(Compra.Id) }, entity.FindPrimaryKey()!.Properties.Select(item => item.Name));
-        Assert.Equal(ValueGenerated.OnAdd, entity.FindProperty(nameof(Compra.Id))!.ValueGenerated);
-        Assert.Equal("id", entity.FindProperty(nameof(Compra.Id))!.GetColumnName(table));
-        IProperty value = entity.FindProperty(nameof(Compra.Valor))!;
+        Assert.Equal(new[] { nameof(Expense.Id) }, entity.FindPrimaryKey()!.Properties.Select(item => item.Name));
+        Assert.Equal(ValueGenerated.OnAdd, entity.FindProperty(nameof(Expense.Id))!.ValueGenerated);
+        Assert.Equal("id", entity.FindProperty(nameof(Expense.Id))!.GetColumnName(table));
+        IProperty value = entity.FindProperty(nameof(Expense.Amount))!;
         Assert.Equal("valor", value.GetColumnName(table));
         Assert.Equal(typeof(double), value.ClrType);
         Assert.Equal("double precision", value.GetColumnType());
-        IProperty description = entity.FindProperty(nameof(Compra.Descricao))!;
+        IProperty description = entity.FindProperty(nameof(Expense.Description))!;
         Assert.Equal("descricao", description.GetColumnName(table));
         Assert.Equal(255, description.GetMaxLength());
-        IProperty category = entity.FindProperty(nameof(Compra.Categoria))!;
+        IProperty category = entity.FindProperty(nameof(Expense.Category))!;
         Assert.Equal("categoria", category.GetColumnName(table));
         Assert.Equal(50, category.GetMaxLength());
         Assert.Equal(typeof(string), category.GetTypeMapping().Converter!.ProviderClrType);
-        IProperty date = entity.FindProperty(nameof(Compra.Data))!;
+        IProperty date = entity.FindProperty(nameof(Expense.DateUtc))!;
         Assert.Equal("data", date.GetColumnName(table));
         Assert.Equal("timestamp with time zone", date.GetColumnType());
         Assert.All(entity.GetProperties(), item => Assert.False(item.IsNullable));
@@ -108,19 +108,19 @@ public sealed class CompraRepositoryTests
         await using FinanceBotDbContext context = new FinanceBotDbContext(options);
         DateTime startUtc = new DateTime(2025, 12, 15, 3, 0, 0, DateTimeKind.Utc);
         DateTime endExclusiveUtc = new DateTime(2026, 1, 15, 3, 0, 0, DateTimeKind.Utc);
-        Compra beforeStart = ExpenseAt(startUtc.AddTicks(-1));
-        Compra atStart = ExpenseAt(startUtc);
-        Compra lastInstant = ExpenseAt(endExclusiveUtc.AddTicks(-1));
-        Compra atEnd = ExpenseAt(endExclusiveUtc);
-        context.Compras.AddRange(atStart, atEnd, beforeStart, lastInstant);
+        Expense beforeStart = ExpenseAt(startUtc.AddTicks(-1));
+        Expense atStart = ExpenseAt(startUtc);
+        Expense lastInstant = ExpenseAt(endExclusiveUtc.AddTicks(-1));
+        Expense atEnd = ExpenseAt(endExclusiveUtc);
+        context.Expenses.AddRange(atStart, atEnd, beforeStart, lastInstant);
         await context.SaveChangesAsync();
-        CompraRepository repository = new CompraRepository(context);
+        ExpenseRepository repository = new ExpenseRepository(context);
 
-        IReadOnlyList<Compra> expenses = await repository.ListByPeriodAsync(startUtc, endExclusiveUtc, CancellationToken.None);
+        IReadOnlyList<Expense> expenses = await repository.ListByPeriodAsync(startUtc, endExclusiveUtc, CancellationToken.None);
 
         Assert.Equal(new[] { lastInstant.Id, atStart.Id }, expenses.Select(expense => expense.Id));
-        Assert.All(expenses, expense => Assert.Equal(DateTimeKind.Utc, expense.Data.Kind));
+        Assert.All(expenses, expense => Assert.Equal(DateTimeKind.Utc, expense.DateUtc.Kind));
     }
 
-    private static Compra ExpenseAt(DateTime dateUtc) => Assert.IsType<CompraCreationResult.Success>(Compra.Criar(10, "Compra na fronteira", Categoria.Mercado, dateUtc)).Compra;
+    private static Expense ExpenseAt(DateTime dateUtc) => Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(10, "Compra na fronteira", Category.Mercado, dateUtc)).Expense;
 }

@@ -29,7 +29,7 @@ public enum CategoryFilterMode
     Exclude
 }
 
-public sealed record CategoryFilter(CategoryFilterMode Mode, IReadOnlyList<Categoria> Categories);
+public sealed record CategoryFilter(CategoryFilterMode Mode, IReadOnlyList<Category> Categories);
 
 public abstract record ListExpensesError
 {

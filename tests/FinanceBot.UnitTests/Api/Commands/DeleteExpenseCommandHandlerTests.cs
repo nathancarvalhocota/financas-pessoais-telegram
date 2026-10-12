@@ -15,15 +15,15 @@ public sealed class DeleteExpenseCommandHandlerTests
     public async Task Handle_ExistingId_ReturnsAllRemovedDataAndDeletesOnlyRequestedExpense(string text, int id)
     {
         var repository = new ExpenseRepository();
-        Compra expense = Expense(id);
-        Compra other = Expense(1);
+        Expense expense = CreateExpense(id);
+        Expense other = CreateExpense(1);
         repository.Items.AddRange([expense, other]);
         using var cancellation = new CancellationTokenSource();
 
         var result = Assert.IsType<DeleteExpenseResult.Success>(await new DeleteExpenseCommandHandler(repository)
             .HandleDeleteExpenseAsync(text, cancellation.Token));
 
-        Assert.Equal(new ExpenseItem(id, 1234.56, "Uber para trabalho", Categoria.Uber,
+        Assert.Equal(new ExpenseItem(id, 1234.56, "Uber para trabalho", Category.Uber,
             new DateTime(2026, 1, 20, 10, 30, 0, DateTimeKind.Utc)), result.Expense);
         Assert.Equal(DateTimeKind.Utc, result.Expense.DateUtc.Kind);
         Assert.Same(other, Assert.Single(repository.Items));
@@ -39,7 +39,7 @@ public sealed class DeleteExpenseCommandHandlerTests
     public async Task Handle_MissingId_ReturnsRequestedIdWithoutDeletingOtherExpenses(int id)
     {
         var repository = new ExpenseRepository();
-        Compra other = Expense(1);
+        Expense other = CreateExpense(1);
         repository.Items.Add(other);
         using var cancellation = new CancellationTokenSource();
 
@@ -92,7 +92,7 @@ public sealed class DeleteExpenseCommandHandlerTests
             ? new OperationCanceledException(cancellation.Token)
             : new InvalidOperationException("Unexpected repository failure.");
         var repository = new ExpenseRepository { FailStage = stage, Exception = expected };
-        Compra expense = Expense(42);
+        Expense expense = CreateExpense(42);
         repository.Items.Add(expense);
 
         Exception exception = await Assert.ThrowsAnyAsync<Exception>(() => new DeleteExpenseCommandHandler(repository)
@@ -108,7 +108,7 @@ public sealed class DeleteExpenseCommandHandlerTests
     private static async Task AssertInvalidInputWithoutIo<TError>(string text) where TError : DeleteExpenseError
     {
         var repository = new ExpenseRepository();
-        Compra expense = Expense(42);
+        Expense expense = CreateExpense(42);
         repository.Items.Add(expense);
 
         var failure = Assert.IsType<DeleteExpenseResult.Failure>(await new DeleteExpenseCommandHandler(repository)
@@ -120,21 +120,21 @@ public sealed class DeleteExpenseCommandHandlerTests
         Assert.Same(expense, Assert.Single(repository.Items));
     }
 
-    private static Compra Expense(int id)
+    private static Expense CreateExpense(int id)
     {
-        Compra expense = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(1234.56, "Uber para trabalho",
-            Categoria.Uber, new DateTime(2026, 1, 20, 10, 30, 0, DateTimeKind.Utc))).Compra;
-        typeof(Compra).GetProperty(nameof(Compra.Id))!.SetValue(expense, id);
+        Expense expense = Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(1234.56, "Uber para trabalho",
+            Category.Uber, new DateTime(2026, 1, 20, 10, 30, 0, DateTimeKind.Utc))).Expense;
+        typeof(Expense).GetProperty(nameof(Expense.Id))!.SetValue(expense, id);
         return expense;
     }
 
-    private sealed class ExpenseRepository : ICompraRepository
+    private sealed class ExpenseRepository : IExpenseRepository
     {
-        public List<Compra> Items { get; } = new();
+        public List<Expense> Items { get; } = new();
         public List<string> Operations { get; } = new();
         public List<CancellationToken> Tokens { get; } = new();
         public List<int> RequestedIds { get; } = new();
-        public List<Compra> Deleted { get; } = new();
+        public List<Expense> Deleted { get; } = new();
         public string? FailStage { get; init; }
         public Exception? Exception { get; init; }
 
@@ -145,14 +145,14 @@ public sealed class DeleteExpenseCommandHandlerTests
             if (FailStage == stage) throw Exception!;
         }
 
-        public Task<Compra?> FindByIdAsync(int id, CancellationToken cancellationToken)
+        public Task<Expense?> FindByIdAsync(int id, CancellationToken cancellationToken)
         {
             Record("find", cancellationToken);
             RequestedIds.Add(id);
             return Task.FromResult(Items.SingleOrDefault(item => item.Id == id));
         }
 
-        public Task DeleteAsync(Compra expense, CancellationToken cancellationToken)
+        public Task DeleteAsync(Expense expense, CancellationToken cancellationToken)
         {
             Record("delete", cancellationToken);
             Assert.True(Items.Remove(expense));
@@ -160,8 +160,8 @@ public sealed class DeleteExpenseCommandHandlerTests
             return Task.CompletedTask;
         }
 
-        public Task AddAsync(Compra expense, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Compra>> ListByPeriodAsync(DateTime startUtc, DateTime endExclusiveUtc,
+        public Task AddAsync(Expense expense, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Expense>> ListByPeriodAsync(DateTime startUtc, DateTime endExclusiveUtc,
             CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

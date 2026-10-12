@@ -3,8 +3,8 @@ using FinanceBot.Domain.Categories;
 namespace FinanceBot.Domain.CategoryLimits;
 
 public sealed record CategoryLimitProgress(
-    Categoria Categoria,
-    double Limite,
-    double TotalGasto,
-    int Percentual,
-    bool Excedido);
+    Category Category,
+    double Limit,
+    double TotalSpent,
+    int Percentage,
+    bool IsExceeded);

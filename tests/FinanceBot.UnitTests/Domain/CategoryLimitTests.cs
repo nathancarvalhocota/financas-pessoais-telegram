@@ -7,12 +7,12 @@ namespace FinanceBot.UnitTests.Domain;
 public sealed class CategoryLimitTests
 {
     [Fact]
-    public void Criar_WithValidData_PreservesCategoryAndValue()
+    public void Create_WithValidData_PreservesCategoryAndValue()
     {
-        LimiteCategoria limit = CreateLimit();
+        CategoryLimit limit = CreateLimit();
 
-        Assert.Equal(Categoria.Mercado, limit.Categoria);
-        Assert.Equal(800, limit.Valor);
+        Assert.Equal(Category.Mercado, limit.Category);
+        Assert.Equal(800, limit.Amount);
         Assert.Equal(0, limit.Id);
     }
 
@@ -22,19 +22,19 @@ public sealed class CategoryLimitTests
     [InlineData(double.NaN)]
     [InlineData(double.PositiveInfinity)]
     [InlineData(double.NegativeInfinity)]
-    public void Criar_WithInvalidValue_ReturnsDomainError(double value)
+    public void Create_WithInvalidValue_ReturnsDomainError(double value)
     {
-        var failure = Assert.IsType<LimiteCategoriaCreationResult.Failure>(LimiteCategoria.Criar(Categoria.Mercado, value));
+        var failure = Assert.IsType<CategoryLimitCreationResult.Failure>(CategoryLimit.Create(Category.Mercado, value));
 
-        Assert.Equal(LimiteCategoriaError.InvalidValue, failure.Error);
+        Assert.Equal(CategoryLimitValidationError.InvalidValue, failure.Error);
     }
 
     [Fact]
-    public void Criar_WithUndefinedCategory_ReturnsDomainError()
+    public void Create_WithUndefinedCategory_ReturnsDomainError()
     {
-        var failure = Assert.IsType<LimiteCategoriaCreationResult.Failure>(LimiteCategoria.Criar((Categoria)999, 100));
+        var failure = Assert.IsType<CategoryLimitCreationResult.Failure>(CategoryLimit.Create((Category)999, 100));
 
-        Assert.Equal(LimiteCategoriaError.InvalidCategory, failure.Error);
+        Assert.Equal(CategoryLimitValidationError.InvalidCategory, failure.Error);
     }
 
     [Theory]
@@ -43,24 +43,24 @@ public sealed class CategoryLimitTests
     [InlineData(double.NaN)]
     [InlineData(double.PositiveInfinity)]
     [InlineData(double.NegativeInfinity)]
-    public void AlterarValor_WithInvalidValue_PreservesState(double value)
+    public void UpdateAmount_WithInvalidValue_PreservesState(double value)
     {
-        LimiteCategoria limit = CreateLimit();
+        CategoryLimit limit = CreateLimit();
 
-        Assert.Equal(LimiteCategoriaError.InvalidValue, limit.AlterarValor(value));
-        Assert.Equal(800, limit.Valor);
-        Assert.Equal(Categoria.Mercado, limit.Categoria);
+        Assert.Equal(CategoryLimitValidationError.InvalidValue, limit.UpdateAmount(value));
+        Assert.Equal(800, limit.Amount);
+        Assert.Equal(Category.Mercado, limit.Category);
         Assert.Equal(0, limit.Id);
     }
 
     [Fact]
-    public void AlterarValor_WithPositiveFiniteValue_UpdatesLimit()
+    public void UpdateAmount_WithPositiveFiniteValue_UpdatesLimit()
     {
-        LimiteCategoria limit = CreateLimit();
+        CategoryLimit limit = CreateLimit();
 
-        Assert.Null(limit.AlterarValor(900.25));
-        Assert.Equal(900.25, limit.Valor);
-        Assert.Equal(Categoria.Mercado, limit.Categoria);
+        Assert.Null(limit.UpdateAmount(900.25));
+        Assert.Equal(900.25, limit.Amount);
+        Assert.Equal(Category.Mercado, limit.Category);
     }
 
     [Theory]
@@ -70,24 +70,24 @@ public sealed class CategoryLimitTests
     [InlineData(800, 100, false)]
     [InlineData(800.01, 100, true)]
     [InlineData(1200, 150, true)]
-    public void AvaliarProgresso_ReturnsDataWithCurrentRoundingAndStrictExceedingRule(
+    public void EvaluateProgress_ReturnsDataWithCurrentRoundingAndStrictExceedingRule(
         double spending, int percentage, bool exceeded)
     {
-        LimiteCategoria limit = CreateLimit();
+        CategoryLimit limit = CreateLimit();
 
-        CategoryLimitProgress progress = limit.AvaliarProgresso(spending);
+        CategoryLimitProgress progress = limit.EvaluateProgress(spending);
 
-        Assert.Equal(new CategoryLimitProgress(Categoria.Mercado, 800, spending, percentage, exceeded), progress);
-        Assert.Equal(800, limit.Valor);
+        Assert.Equal(new CategoryLimitProgress(Category.Mercado, 800, spending, percentage, exceeded), progress);
+        Assert.Equal(800, limit.Amount);
     }
 
     [Fact]
     public void PublicSurface_DoesNotAllowBypassingValidation()
     {
-        Assert.Empty(typeof(LimiteCategoria).GetConstructors());
-        Assert.All(typeof(LimiteCategoria).GetProperties(), property => Assert.False(property.SetMethod?.IsPublic ?? false));
+        Assert.Empty(typeof(CategoryLimit).GetConstructors());
+        Assert.All(typeof(CategoryLimit).GetProperties(), property => Assert.False(property.SetMethod?.IsPublic ?? false));
     }
 
-    private static LimiteCategoria CreateLimit() =>
-        Assert.IsType<LimiteCategoriaCreationResult.Success>(LimiteCategoria.Criar(Categoria.Mercado, 800)).Limite;
+    private static CategoryLimit CreateLimit() =>
+        Assert.IsType<CategoryLimitCreationResult.Success>(CategoryLimit.Create(Category.Mercado, 800)).Limit;
 }

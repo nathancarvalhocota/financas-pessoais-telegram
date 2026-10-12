@@ -1,6 +1,6 @@
 namespace FinanceBot.Domain.Categories;
 
-public enum Categoria
+public enum Category
 {
     Educacao = 1,
     Lazer = 2,

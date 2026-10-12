@@ -16,8 +16,8 @@ public sealed class ExpenseListFormatterTests
     public void Format_Items_PreservesCompleteMessageOrderDuplicatesAndUtcInstants(CategoryFilterMode mode, string suffix)
     {
         var result = new ListExpensesResult.Success(Cycle, Filter(mode),
-            [new ExpenseItem(9, 1234.56, "Último dia", Categoria.Mercado, new DateTime(2026, 5, 15, 2, 59, 0, DateTimeKind.Utc)),
-             new ExpenseItem(2, 10, "Primeiro dia", Categoria.Uber, new DateTime(2026, 4, 15, 3, 0, 0, DateTimeKind.Utc))], 1244.56);
+            [new ExpenseItem(9, 1234.56, "Último dia", Category.Mercado, new DateTime(2026, 5, 15, 2, 59, 0, DateTimeKind.Utc)),
+             new ExpenseItem(2, 10, "Primeiro dia", Category.Uber, new DateTime(2026, 4, 15, 3, 0, 0, DateTimeKind.Utc))], 1244.56);
         string newline = Environment.NewLine;
 
         string actual = ExpenseListFormatter.Format(result);
@@ -32,8 +32,8 @@ public sealed class ExpenseListFormatterTests
     public void Format_PreparedResult_UsesFinalItemsAndTotal()
     {
         var result = new ListExpensesResult.Success(Cycle,
-            new CategoryFilter(CategoryFilterMode.Exclude, [Categoria.Mercado]),
-            [new ExpenseItem(1, 10, "Item final", Categoria.Mercado, new DateTime(2026, 4, 20, 12, 0, 0, DateTimeKind.Utc))], 55.25);
+            new CategoryFilter(CategoryFilterMode.Exclude, [Category.Mercado]),
+            [new ExpenseItem(1, 10, "Item final", Category.Mercado, new DateTime(2026, 4, 20, 12, 0, 0, DateTimeKind.Utc))], 55.25);
 
         string actual = ExpenseListFormatter.Format(result);
 
@@ -58,7 +58,7 @@ public sealed class ExpenseListFormatterTests
     {
         var result = new ListExpensesResult.Success(
             new ExpensePeriod(ExpensePeriodKind.DateRange, new DateOnly(2025, 12, 31), new DateOnly(2026, 1, 1)), Filter(CategoryFilterMode.None),
-            [new ExpenseItem(1, 10, "Virada", Categoria.Uber, new DateTime(2026, 1, 2, 2, 0, 0, DateTimeKind.Utc))], 10);
+            [new ExpenseItem(1, 10, "Virada", Category.Uber, new DateTime(2026, 1, 2, 2, 0, 0, DateTimeKind.Utc))], 10);
 
         string actual = ExpenseListFormatter.Format(result);
 
@@ -84,5 +84,5 @@ public sealed class ExpenseListFormatterTests
     }
 
     private static CategoryFilter Filter(CategoryFilterMode mode) => new(mode,
-        mode == CategoryFilterMode.None ? [] : [Categoria.Mercado, Categoria.Uber, Categoria.Mercado]);
+        mode == CategoryFilterMode.None ? [] : [Category.Mercado, Category.Uber, Category.Mercado]);
 }

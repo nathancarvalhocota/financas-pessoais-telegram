@@ -10,9 +10,9 @@ public sealed class DeleteExpenseCommandHandler
         "^/deletar\\s+(\\d+)\\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
-    private readonly ICompraRepository _expenseRepository;
+    private readonly IExpenseRepository _expenseRepository;
 
-    public DeleteExpenseCommandHandler(ICompraRepository expenseRepository)
+    public DeleteExpenseCommandHandler(IExpenseRepository expenseRepository)
     {
         _expenseRepository = expenseRepository;
     }
@@ -31,7 +31,7 @@ public sealed class DeleteExpenseCommandHandler
             return new DeleteExpenseResult.Failure(new DeleteExpenseError.InvalidId());
         }
 
-        Compra? expense = await _expenseRepository.FindByIdAsync(expenseId, cancellationToken);
+        Expense? expense = await _expenseRepository.FindByIdAsync(expenseId, cancellationToken);
         if (expense is null)
         {
             return new DeleteExpenseResult.NotFound(expenseId);

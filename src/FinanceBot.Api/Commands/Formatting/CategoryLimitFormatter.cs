@@ -10,7 +10,7 @@ public static class CategoryLimitFormatter
         CategoryLimitResult.Queried { Progress: null } query =>
             $"Nenhum limite definido para {CategoryCatalog.GetDisplayName(query.Category)}.",
         CategoryLimitResult.Queried { Progress: { } progress } =>
-            $"{CategoryCatalog.GetDisplayName(progress.Categoria)}: R$ {BrazilianCurrencyFormatter.FormatAmount(progress.TotalGasto)} de R$ {BrazilianCurrencyFormatter.FormatAmount(progress.Limite)} ({progress.Percentual}%)",
+            $"{CategoryCatalog.GetDisplayName(progress.Category)}: R$ {BrazilianCurrencyFormatter.FormatAmount(progress.TotalSpent)} de R$ {BrazilianCurrencyFormatter.FormatAmount(progress.Limit)} ({progress.Percentage}%)",
         CategoryLimitResult.Updated updated =>
             $"Limite de {CategoryCatalog.GetDisplayName(updated.Category)} definido: R$ {BrazilianCurrencyFormatter.FormatAmount(updated.Value)}",
         CategoryLimitResult.Removed removed =>

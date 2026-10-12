@@ -10,7 +10,7 @@ public sealed class DeleteExpenseFormatterTests
     [Fact]
     public void Format_Success_PreservesCompleteConfirmation()
     {
-        var expense = new ExpenseItem(42, 1234.56, "Uber para trabalho", Categoria.Uber,
+        var expense = new ExpenseItem(42, 1234.56, "Uber para trabalho", Category.Uber,
             new DateTime(2026, 1, 20, 10, 30, 0, DateTimeKind.Utc));
 
         Assert.Equal("Compra removida: R$ 1.234,56 - Uber para trabalho (Uber)",

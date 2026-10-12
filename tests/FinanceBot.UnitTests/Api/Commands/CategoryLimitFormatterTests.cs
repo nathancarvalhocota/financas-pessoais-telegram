@@ -12,7 +12,7 @@ public sealed class CategoryLimitFormatterTests
     public void Format_QueryWithoutLimit_PreservesMessage()
     {
         Assert.Equal("Nenhum limite definido para Mercado.",
-            CategoryLimitFormatter.Format(new CategoryLimitResult.Queried(Categoria.Mercado, null)));
+            CategoryLimitFormatter.Format(new CategoryLimitResult.Queried(Category.Mercado, null)));
     }
 
     [Theory]
@@ -21,18 +21,18 @@ public sealed class CategoryLimitFormatterTests
     [InlineData(1000, 125, true, "Mercado: R$ 1.000,00 de R$ 800,00 (125%)")]
     public void Format_QueryWithProgress_PreservesMessage(double spending, int percentage, bool exceeded, string expected)
     {
-        var progress = new CategoryLimitProgress(Categoria.Mercado, 800, spending, percentage, exceeded);
+        var progress = new CategoryLimitProgress(Category.Mercado, 800, spending, percentage, exceeded);
 
-        Assert.Equal(expected, CategoryLimitFormatter.Format(new CategoryLimitResult.Queried(Categoria.Mercado, progress)));
+        Assert.Equal(expected, CategoryLimitFormatter.Format(new CategoryLimitResult.Queried(Category.Mercado, progress)));
     }
 
     [Fact]
     public void Format_UpdateAndRemoval_PreserveMessages()
     {
         Assert.Equal("Limite de Mercado definido: R$ 1.200,25",
-            CategoryLimitFormatter.Format(new CategoryLimitResult.Updated(Categoria.Mercado, 1200.25)));
+            CategoryLimitFormatter.Format(new CategoryLimitResult.Updated(Category.Mercado, 1200.25)));
         Assert.Equal("Limite de Mercado removido",
-            CategoryLimitFormatter.Format(new CategoryLimitResult.Removed(Categoria.Mercado)));
+            CategoryLimitFormatter.Format(new CategoryLimitResult.Removed(Category.Mercado)));
     }
 
     [Fact]

@@ -43,16 +43,16 @@ public sealed class TelegramWebhookEndpointTests
         using (IServiceScope scope = factory.Services.CreateScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>();
-            Compra Create(double amount, string description, Categoria category, DateTime date) =>
-                Assert.IsType<CompraCreationResult.Success>(Compra.Criar(amount, description, category, date)).Compra;
+            Expense Create(double amount, string description, Category category, DateTime date) =>
+                Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(amount, description, category, date)).Expense;
             DateTime start = new(2026, 4, 15, 3, 0, 0, DateTimeKind.Utc);
             DateTime end = new(2026, 5, 15, 3, 0, 0, DateTimeKind.Utc);
-            Compra first = Create(10.25, "Primeiro instante", Categoria.Mercado, start);
-            Compra middle = Create(20, "Cinema", Categoria.Lazer, start.AddDays(5));
-            Compra last = Create(30.5, "Último instante", Categoria.Uber, end.AddTicks(-1));
-            context.Compras.AddRange(first, last, middle,
-                Create(100, "Antes", Categoria.Mercado, start.AddTicks(-1)),
-                Create(200, "Depois", Categoria.Uber, end));
+            Expense first = Create(10.25, "Primeiro instante", Category.Mercado, start);
+            Expense middle = Create(20, "Cinema", Category.Lazer, start.AddDays(5));
+            Expense last = Create(30.5, "Último instante", Category.Uber, end.AddTicks(-1));
+            context.Expenses.AddRange(first, last, middle,
+                Create(100, "Antes", Category.Mercado, start.AddTicks(-1)),
+                Create(200, "Depois", Category.Uber, end));
             await context.SaveChangesAsync();
             firstId = first.Id;
             middleId = middle.Id;
@@ -77,7 +77,7 @@ public sealed class TelegramWebhookEndpointTests
             $"\nTotal: R$ {(showLeisure ? "60,75" : "40,75")}";
         Assert.Equal(expected, Assert.Single(factory.RecordingTelegramMessageHandler.SentMessages).Text);
         using IServiceScope verify = factory.Services.CreateScope();
-        Assert.Equal(5, verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras.Count());
+        Assert.Equal(5, verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Expenses.Count());
     }
 
     [Theory]
@@ -107,7 +107,7 @@ public sealed class TelegramWebhookEndpointTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(expected, Assert.Single(factory.RecordingTelegramMessageHandler.SentMessages).Text);
         using IServiceScope verify = factory.Services.CreateScope();
-        Assert.Empty(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras);
+        Assert.Empty(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Expenses);
     }
 
     [Theory]
@@ -121,9 +121,9 @@ public sealed class TelegramWebhookEndpointTests
         using (IServiceScope scope = factory.Services.CreateScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>();
-            context.Compras.Add(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(
-                100, "Base anterior", Categoria.Mercado, new DateTime(2026, 4, 14, 12, 0, 0, DateTimeKind.Utc))).Compra);
-            context.LimiteCategorias.Add(Assert.IsType<LimiteCategoriaCreationResult.Success>(LimiteCategoria.Criar(Categoria.Mercado, 100)).Limite);
+            context.Expenses.Add(Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(
+                100, "Base anterior", Category.Mercado, new DateTime(2026, 4, 14, 12, 0, 0, DateTimeKind.Utc))).Expense);
+            context.CategoryLimits.Add(Assert.IsType<CategoryLimitCreationResult.Success>(CategoryLimit.Create(Category.Mercado, 100)).Limit);
             await context.SaveChangesAsync();
         }
 
@@ -145,9 +145,9 @@ public sealed class TelegramWebhookEndpointTests
         Assert.Contains($"Gasto atual: {amount}% do ciclo anterior (+R$ {amount - 100},00).", reply);
         Assert.Contains("• Educacao: R$ 0,00 vs R$ 0,00 (sem gastos nos dois períodos)", reply);
         using IServiceScope verify = factory.Services.CreateScope();
-        var saved = Assert.Single(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras, item => item.Descricao == "Compra atual");
-        Assert.Equal(amount, saved.Valor);
-        Assert.Equal(new DateTime(2026, 4, 20, 12, 0, 0, DateTimeKind.Utc), saved.Data);
+        var saved = Assert.Single(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Expenses, item => item.Description == "Compra atual");
+        Assert.Equal(amount, saved.Amount);
+        Assert.Equal(new DateTime(2026, 4, 20, 12, 0, 0, DateTimeKind.Utc), saved.DateUtc);
         Assert.True(saved.Id > 0);
     }
 
@@ -167,7 +167,7 @@ public sealed class TelegramWebhookEndpointTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(expected, Assert.Single(factory.RecordingTelegramMessageHandler.SentMessages).Text);
         using IServiceScope verify = factory.Services.CreateScope();
-        Assert.Empty(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras);
+        Assert.Empty(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Expenses);
     }
 
     [Fact]
@@ -196,9 +196,9 @@ public sealed class TelegramWebhookEndpointTests
         int id;
         using (IServiceScope scope = factory.Services.CreateScope())
         {
-            var limit = Assert.Single(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().LimiteCategorias);
+            var limit = Assert.Single(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().CategoryLimits);
             id = limit.Id;
-            Assert.Equal(800.25, limit.Valor);
+            Assert.Equal(800.25, limit.Amount);
         }
 
         await SendAsync("/limite Mercado 100", "Limite de Mercado definido: R$ 100,00");
@@ -207,16 +207,16 @@ public sealed class TelegramWebhookEndpointTests
         await SendAsync("/limite Mercado " + new string('9', 400), "Valor invalido. Use um numero positivo ou 0 para remover o limite.");
         using (IServiceScope scope = factory.Services.CreateScope())
         {
-            var limit = Assert.Single(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().LimiteCategorias);
+            var limit = Assert.Single(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().CategoryLimits);
             Assert.Equal(id, limit.Id);
-            Assert.Equal(100, limit.Valor);
+            Assert.Equal(100, limit.Amount);
         }
 
         await SendAsync("/limite Mercado 0", "Limite de Mercado removido");
         await SendAsync("/limite Mercado 0", "Limite de Mercado removido");
         await SendAsync("/limite Mercado", "Nenhum limite definido para Mercado.");
         using IServiceScope verify = factory.Services.CreateScope();
-        Assert.Empty(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().LimiteCategorias);
+        Assert.Empty(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().CategoryLimits);
     }
 
     [Fact]
@@ -237,7 +237,7 @@ public sealed class TelegramWebhookEndpointTests
         Assert.Equal("Uso correto: /limite <CATEGORIA> <VALOR>. Exemplo: /limite Mercado 800\nPara consultar: /limite <CATEGORIA>. Exemplo: /limite Mercado",
             Assert.Single(factory.RecordingTelegramMessageHandler.SentMessages).Text);
         using IServiceScope scope = factory.Services.CreateScope();
-        Assert.Empty(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().LimiteCategorias);
+        Assert.Empty(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().CategoryLimits);
     }
 
     [Theory]
@@ -263,7 +263,7 @@ public sealed class TelegramWebhookEndpointTests
         Assert.DoesNotContain("INVALID_HEADER_PRIVATE", logs);
         Assert.DoesNotContain(FinanceBotApiFactory.Secret, logs);
         using IServiceScope scope = factory.Services.CreateScope();
-        Assert.Empty(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras);
+        Assert.Empty(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Expenses);
     }
 
     [Fact]
@@ -276,7 +276,7 @@ public sealed class TelegramWebhookEndpointTests
         Assert.Empty(factory.RecordingTelegramMessageHandler.SentMessages);
         AssertCompletion(factory, "ignored", null);
         using IServiceScope scope = factory.Services.CreateScope();
-        Assert.Empty(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras);
+        Assert.Empty(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Expenses);
     }
 
     [Theory]
@@ -293,7 +293,7 @@ public sealed class TelegramWebhookEndpointTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using IServiceScope scope = factory.Services.CreateScope();
-        Assert.Single(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras);
+        Assert.Single(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Expenses);
         string logs = string.Join("\n", factory.Logs.Entries);
         foreach (string sensitive in new[] { "test-token-identifiable", FinanceBotApiFactory.Secret, "PRIVATE_MESSAGE_IDENTIFIABLE", "58,90", "RAW_BODY_IDENTIFIABLE", "INNER_EXCEPTION_IDENTIFIABLE", "api.telegram.org" })
             Assert.DoesNotContain(sensitive, logs);
@@ -515,10 +515,10 @@ public sealed class TelegramWebhookEndpointTests
         using IServiceScope serviceScope = financeBotApiFactory.Services.CreateScope();
         FinanceBotDbContext financeBotDbContext = serviceScope.ServiceProvider.GetRequiredService<
             FinanceBotDbContext>();
-        Compra persistedCompra = Assert.Single(financeBotDbContext.Compras.ToList());
-        Assert.Equal(58.90, persistedCompra.Valor, 2);
-        Assert.Equal("Almoco da semana", persistedCompra.Descricao);
-        Assert.Equal(Categoria.Mercado, persistedCompra.Categoria);
+        Expense persistedExpense = Assert.Single(financeBotDbContext.Expenses.ToList());
+        Assert.Equal(58.90, persistedExpense.Amount, 2);
+        Assert.Equal("Almoco da semana", persistedExpense.Description);
+        Assert.Equal(Category.Mercado, persistedExpense.Category);
     }
 
     [Fact]
@@ -555,7 +555,7 @@ public sealed class TelegramWebhookEndpointTests
         using IServiceScope serviceScope = financeBotApiFactory.Services.CreateScope();
         FinanceBotDbContext financeBotDbContext = serviceScope.ServiceProvider.GetRequiredService<
             FinanceBotDbContext>();
-        Assert.Empty(financeBotDbContext.Compras.ToList());
+        Assert.Empty(financeBotDbContext.Expenses.ToList());
     }
 
     [Fact]
@@ -569,9 +569,9 @@ public sealed class TelegramWebhookEndpointTests
         {
             FinanceBotDbContext financeBotDbContext = serviceScope.ServiceProvider.GetRequiredService<
                 FinanceBotDbContext>();
-            Compra compra1 = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(58.90, "Almoco", Categoria.Mercado, januaryDate)).Compra;
-            Compra compra2 = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(20.00, "Lanche", Categoria.Lanches, januaryDate.AddDays(1))).Compra;
-            financeBotDbContext.Compras.AddRange(compra1, compra2);
+            Expense expense1 = Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(58.90, "Almoco", Category.Mercado, januaryDate)).Expense;
+            Expense expense2 = Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(20.00, "Lanche", Category.Lanches, januaryDate.AddDays(1))).Expense;
+            financeBotDbContext.Expenses.AddRange(expense1, expense2);
             financeBotDbContext.SaveChanges();
         }
 
@@ -605,18 +605,18 @@ public sealed class TelegramWebhookEndpointTests
     {
         using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(998877);
         HttpClient httpClient = financeBotApiFactory.CreateClient();
-        int compraId;
+        int expenseId;
         int otherId;
 
         using (IServiceScope serviceScope = financeBotApiFactory.Services.CreateScope())
         {
             FinanceBotDbContext financeBotDbContext = serviceScope.ServiceProvider.GetRequiredService<
                 FinanceBotDbContext>();
-            Compra compra = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(33.50, "Uber para trabalho", Categoria.Uber, DateTime.UtcNow)).Compra;
-            Compra other = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(10, "Preservada", Categoria.Mercado, DateTime.UtcNow)).Compra;
-            financeBotDbContext.Compras.AddRange(compra, other);
+            Expense expense = Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(33.50, "Uber para trabalho", Category.Uber, DateTime.UtcNow)).Expense;
+            Expense other = Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(10, "Preservada", Category.Mercado, DateTime.UtcNow)).Expense;
+            financeBotDbContext.Expenses.AddRange(expense, other);
             financeBotDbContext.SaveChanges();
-            compraId = compra.Id;
+            expenseId = expense.Id;
             otherId = other.Id;
         }
 
@@ -628,7 +628,7 @@ public sealed class TelegramWebhookEndpointTests
                 {
                     Id = 998877
                 },
-                Text = $"  /DELETAR\t00{compraId}  "
+                Text = $"  /DELETAR\t00{expenseId}  "
             }
         };
 
@@ -652,11 +652,11 @@ public sealed class TelegramWebhookEndpointTests
         using IServiceScope verifyScope = financeBotApiFactory.Services.CreateScope();
         FinanceBotDbContext verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<
             FinanceBotDbContext>();
-        Compra preserved = Assert.Single(verifyDbContext.Compras.ToList());
+        Expense preserved = Assert.Single(verifyDbContext.Expenses.ToList());
         Assert.Equal(otherId, preserved.Id);
-        Assert.Equal("Preservada", preserved.Descricao);
-        Assert.Equal(10, preserved.Valor);
-        Assert.Equal(Categoria.Mercado, preserved.Categoria);
+        Assert.Equal("Preservada", preserved.Description);
+        Assert.Equal(10, preserved.Amount);
+        Assert.Equal(Category.Mercado, preserved.Category);
     }
 
     [Theory]
@@ -676,8 +676,8 @@ public sealed class TelegramWebhookEndpointTests
         using (IServiceScope scope = factory.Services.CreateScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>();
-            Compra expense = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(33.50, "Preservada", Categoria.Uber, date)).Compra;
-            context.Compras.Add(expense);
+            Expense expense = Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(33.50, "Preservada", Category.Uber, date)).Expense;
+            context.Expenses.Add(expense);
             await context.SaveChangesAsync();
             id = expense.Id;
         }
@@ -692,12 +692,12 @@ public sealed class TelegramWebhookEndpointTests
         Assert.Equal(998877, reply.ChatId);
         Assert.Equal(expected, reply.Text);
         using IServiceScope verify = factory.Services.CreateScope();
-        Compra preserved = Assert.Single(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras);
+        Expense preserved = Assert.Single(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Expenses);
         Assert.Equal(id, preserved.Id);
-        Assert.Equal(33.50, preserved.Valor);
-        Assert.Equal("Preservada", preserved.Descricao);
-        Assert.Equal(Categoria.Uber, preserved.Categoria);
-        Assert.Equal(date, preserved.Data);
+        Assert.Equal(33.50, preserved.Amount);
+        Assert.Equal("Preservada", preserved.Description);
+        Assert.Equal(Category.Uber, preserved.Category);
+        Assert.Equal(date, preserved.DateUtc);
     }
 
     [Fact]
@@ -751,7 +751,7 @@ public sealed class TelegramWebhookEndpointTests
         using IServiceScope serviceScope = financeBotApiFactory.Services.CreateScope();
         FinanceBotDbContext financeBotDbContext = serviceScope.ServiceProvider.GetRequiredService<
             FinanceBotDbContext>();
-        Assert.Empty(financeBotDbContext.Compras.ToList());
+        Assert.Empty(financeBotDbContext.Expenses.ToList());
     }
 
     private sealed class FinanceBotApiFactory : WebApplicationFactory<Program>
@@ -840,7 +840,7 @@ public sealed class TelegramWebhookEndpointTests
                         throw new InvalidOperationException("Database must not be resolved before options validation.");
                     });
                 }
-                if (FailCommand) services.AddScoped<ICompraRepository, FailingCompraRepository>();
+                if (FailCommand) services.AddScoped<IExpenseRepository, FailingExpenseRepository>();
 
                 services.RemoveAll<TelegramMessageSender>();
                 services.AddHttpClient<TelegramMessageSender>()
@@ -882,12 +882,12 @@ public sealed class TelegramWebhookEndpointTests
         }
     }
 
-    private sealed class FailingCompraRepository : ICompraRepository
+    private sealed class FailingExpenseRepository : IExpenseRepository
     {
-        public Task AddAsync(Compra compra, CancellationToken cancellationToken) => throw new InvalidOperationException("COMMAND_EXCEPTION_PRIVATE test-token-identifiable");
-        public Task<IReadOnlyList<Compra>> ListByPeriodAsync(DateTime periodStartUtc, DateTime periodEndExclusiveUtc, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Compra>>([]);
-        public Task<Compra?> FindByIdAsync(int id, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task DeleteAsync(Compra compra, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task AddAsync(Expense expense, CancellationToken cancellationToken) => throw new InvalidOperationException("COMMAND_EXCEPTION_PRIVATE test-token-identifiable");
+        public Task<IReadOnlyList<Expense>> ListByPeriodAsync(DateTime periodStartUtc, DateTime periodEndExclusiveUtc, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Expense>>([]);
+        public Task<Expense?> FindByIdAsync(int id, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task DeleteAsync(Expense expense, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class CaptureRequestIdFilter(ConcurrentQueue<string> identifiers) : IStartupFilter

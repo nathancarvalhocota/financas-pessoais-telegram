@@ -17,7 +17,7 @@ public sealed class CategoryLimitCommandHandlerTests
 
         var result = Assert.IsType<CategoryLimitResult.Queried>(await handler.HandleSetCategoryLimitAsync("/limite Mercado", CancellationToken.None));
 
-        Assert.Equal(Categoria.Mercado, result.Category);
+        Assert.Equal(Category.Mercado, result.Category);
         Assert.Null(result.Progress);
         Assert.Empty(expenses.Periods);
     }
@@ -32,10 +32,10 @@ public sealed class CategoryLimitCommandHandlerTests
         var expenses = new ExpenseRepository();
         expenses.Items.AddRange(new[]
         {
-            Expense(Categoria.Mercado, spending, start),
-            Expense(Categoria.Uber, 500, start),
-            Expense(Categoria.Mercado, 999, start.AddTicks(-1)),
-            Expense(Categoria.Mercado, 999, end)
+            CreateExpense(Category.Mercado, spending, start),
+            CreateExpense(Category.Uber, 500, start),
+            CreateExpense(Category.Mercado, 999, start.AddTicks(-1)),
+            CreateExpense(Category.Mercado, 999, end)
         });
         var limits = new LimitRepository();
         await limits.UpsertAsync(CreateLimit(100), CancellationToken.None);
@@ -43,7 +43,7 @@ public sealed class CategoryLimitCommandHandlerTests
 
         var result = Assert.IsType<CategoryLimitResult.Queried>(await handler.HandleSetCategoryLimitAsync("/limite Mercado", CancellationToken.None));
 
-        Assert.Equal(new CategoryLimitProgress(Categoria.Mercado, 100, spending, percentage, exceeded), result.Progress);
+        Assert.Equal(new CategoryLimitProgress(Category.Mercado, 100, spending, percentage, exceeded), result.Progress);
         Assert.Equal((start, end), Assert.Single(expenses.Periods));
     }
 
@@ -54,16 +54,16 @@ public sealed class CategoryLimitCommandHandlerTests
     {
         var expenses = new ExpenseRepository();
         var limits = new LimitRepository();
-        LimiteCategoria existing = CreateLimit(100);
+        CategoryLimit existing = CreateLimit(100);
         await limits.UpsertAsync(existing, CancellationToken.None);
         var handler = CreateHandler(expenses, limits);
 
         var result = Assert.IsType<CategoryLimitResult.Updated>(await handler.HandleSetCategoryLimitAsync(command, CancellationToken.None));
 
-        Assert.Equal(Categoria.Mercado, result.Category);
+        Assert.Equal(Category.Mercado, result.Category);
         Assert.Equal(expectedValue, result.Value);
         Assert.Same(existing, limits.Limit);
-        Assert.Equal(expectedValue, existing.Valor);
+        Assert.Equal(expectedValue, existing.Amount);
         Assert.Empty(expenses.Periods);
     }
 
@@ -76,7 +76,7 @@ public sealed class CategoryLimitCommandHandlerTests
         var result = Assert.IsType<CategoryLimitResult.Updated>(await handler.HandleSetCategoryLimitAsync("/limite Mercado 800", CancellationToken.None));
 
         Assert.Equal(800, result.Value);
-        Assert.Equal(800, limits.Limit!.Valor);
+        Assert.Equal(800, limits.Limit!.Amount);
         Assert.Equal(1, limits.Upserts);
     }
 
@@ -93,7 +93,7 @@ public sealed class CategoryLimitCommandHandlerTests
 
         var result = Assert.IsType<CategoryLimitResult.Removed>(await handler.HandleSetCategoryLimitAsync("/limite Mercado 0", CancellationToken.None));
 
-        Assert.Equal(Categoria.Mercado, result.Category);
+        Assert.Equal(Category.Mercado, result.Category);
         Assert.Null(limits.Limit);
         Assert.Equal(exists ? 1 : 0, limits.Deletes);
         Assert.Equal(upsertsBefore, limits.Upserts);
@@ -143,67 +143,67 @@ public sealed class CategoryLimitCommandHandlerTests
         var failure = Assert.IsType<CategoryLimitResult.Failure>(await handler.HandleSetCategoryLimitAsync("/limite Mercado " + new string('9', 400), CancellationToken.None));
 
         Assert.IsType<CategoryLimitError.InvalidLimit>(failure.Error);
-        Assert.Equal(100, limits.Limit!.Valor);
+        Assert.Equal(100, limits.Limit!.Amount);
         Assert.Equal(1, limits.Upserts);
     }
 
     private static CategoryLimitCommandHandler CreateHandler(ExpenseRepository expenses, LimitRepository limits) =>
         new(expenses, limits, new FixedTimeProvider());
 
-    private static LimiteCategoria CreateLimit(double value) =>
-        Assert.IsType<LimiteCategoriaCreationResult.Success>(LimiteCategoria.Criar(Categoria.Mercado, value)).Limite;
+    private static CategoryLimit CreateLimit(double value) =>
+        Assert.IsType<CategoryLimitCreationResult.Success>(CategoryLimit.Create(Category.Mercado, value)).Limit;
 
-    private static Compra Expense(Categoria category, double value, DateTime date) =>
-        Assert.IsType<CompraCreationResult.Success>(Compra.Criar(value, "Compra", category, date)).Compra;
+    private static Expense CreateExpense(Category category, double value, DateTime date) =>
+        Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(value, "Compra", category, date)).Expense;
 
     private sealed class FixedTimeProvider : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => new(2026, 1, 15, 2, 59, 59, TimeSpan.Zero);
     }
 
-    private sealed class LimitRepository : ILimiteCategoriaRepository
+    private sealed class LimitRepository : ICategoryLimitRepository
     {
-        public LimiteCategoria? Limit { get; private set; }
+        public CategoryLimit? Limit { get; private set; }
         public int Reads { get; private set; }
         public int Upserts { get; private set; }
         public int Deletes { get; private set; }
 
-        public Task<LimiteCategoria?> GetByCategoryAsync(Categoria categoria, CancellationToken cancellationToken)
+        public Task<CategoryLimit?> GetByCategoryAsync(Category category, CancellationToken cancellationToken)
         {
             Reads++;
-            return Task.FromResult(Limit?.Categoria == categoria ? Limit : null);
+            return Task.FromResult(Limit?.Category == category ? Limit : null);
         }
 
-        public Task UpsertAsync(LimiteCategoria limiteCategoria, CancellationToken cancellationToken)
+        public Task UpsertAsync(CategoryLimit categoryLimit, CancellationToken cancellationToken)
         {
             Upserts++;
-            if (Limit is null) Limit = limiteCategoria;
-            else Assert.Null(Limit.AlterarValor(limiteCategoria.Valor));
+            if (Limit is null) Limit = categoryLimit;
+            else Assert.Null(Limit.UpdateAmount(categoryLimit.Amount));
             return Task.CompletedTask;
         }
 
-        public Task DeleteAsync(LimiteCategoria limiteCategoria, CancellationToken cancellationToken)
+        public Task DeleteAsync(CategoryLimit categoryLimit, CancellationToken cancellationToken)
         {
             Deletes++;
-            Assert.Same(Limit, limiteCategoria);
+            Assert.Same(Limit, categoryLimit);
             Limit = null;
             return Task.CompletedTask;
         }
     }
 
-    private sealed class ExpenseRepository : ICompraRepository
+    private sealed class ExpenseRepository : IExpenseRepository
     {
-        public List<Compra> Items { get; } = new();
+        public List<Expense> Items { get; } = new();
         public List<(DateTime Start, DateTime EndExclusive)> Periods { get; } = new();
 
-        public Task<IReadOnlyList<Compra>> ListByPeriodAsync(DateTime periodStartUtc, DateTime periodEndExclusiveUtc, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<Expense>> ListByPeriodAsync(DateTime periodStartUtc, DateTime periodEndExclusiveUtc, CancellationToken cancellationToken)
         {
             Periods.Add((periodStartUtc, periodEndExclusiveUtc));
-            return Task.FromResult<IReadOnlyList<Compra>>(Items.Where(item => item.Data >= periodStartUtc && item.Data < periodEndExclusiveUtc).ToList());
+            return Task.FromResult<IReadOnlyList<Expense>>(Items.Where(item => item.DateUtc >= periodStartUtc && item.DateUtc < periodEndExclusiveUtc).ToList());
         }
 
-        public Task AddAsync(Compra compra, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Compra?> FindByIdAsync(int compraId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task DeleteAsync(Compra compra, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task AddAsync(Expense expense, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Expense?> FindByIdAsync(int expenseId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task DeleteAsync(Expense expense, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

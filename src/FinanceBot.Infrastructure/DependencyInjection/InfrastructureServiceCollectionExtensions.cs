@@ -28,8 +28,8 @@ public static class InfrastructureServiceCollectionExtensions
             options.UseNpgsql(connectionString);
         });
 
-        services.AddScoped<ICompraRepository, CompraRepository>();
-        services.AddScoped<ILimiteCategoriaRepository, LimiteCategoriaRepository>();
+        services.AddScoped<IExpenseRepository, ExpenseRepository>();
+        services.AddScoped<ICategoryLimitRepository, CategoryLimitRepository>();
 
         return services;
     }

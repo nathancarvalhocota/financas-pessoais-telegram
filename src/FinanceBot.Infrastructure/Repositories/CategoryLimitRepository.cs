@@ -5,38 +5,38 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanceBot.Infrastructure.Repositories;
 
-public sealed class LimiteCategoriaRepository : ILimiteCategoriaRepository
+public sealed class CategoryLimitRepository : ICategoryLimitRepository
 {
     private readonly FinanceBotDbContext _financeBotDbContext;
 
-    public LimiteCategoriaRepository(FinanceBotDbContext financeBotDbContext)
+    public CategoryLimitRepository(FinanceBotDbContext financeBotDbContext)
     {
         _financeBotDbContext = financeBotDbContext;
     }
 
-    public async Task<LimiteCategoria?> GetByCategoryAsync(
-        Categoria categoria,
+    public async Task<CategoryLimit?> GetByCategoryAsync(
+        Category category,
         CancellationToken cancellationToken)
     {
-        return await _financeBotDbContext.LimiteCategorias
+        return await _financeBotDbContext.CategoryLimits
             .AsNoTracking()
-            .FirstOrDefaultAsync(l => l.Categoria == categoria, cancellationToken);
+            .FirstOrDefaultAsync(l => l.Category == category, cancellationToken);
     }
 
     public async Task UpsertAsync(
-        LimiteCategoria limiteCategoria,
+        CategoryLimit categoryLimit,
         CancellationToken cancellationToken)
     {
-        LimiteCategoria? existing = await _financeBotDbContext.LimiteCategorias
-            .FirstOrDefaultAsync(l => l.Categoria == limiteCategoria.Categoria, cancellationToken);
+        CategoryLimit? existing = await _financeBotDbContext.CategoryLimits
+            .FirstOrDefaultAsync(l => l.Category == categoryLimit.Category, cancellationToken);
 
         if (existing is null)
         {
-            await _financeBotDbContext.LimiteCategorias.AddAsync(limiteCategoria, cancellationToken);
+            await _financeBotDbContext.CategoryLimits.AddAsync(categoryLimit, cancellationToken);
         }
         else
         {
-            LimiteCategoriaError? error = existing.AlterarValor(limiteCategoria.Valor);
+            CategoryLimitValidationError? error = existing.UpdateAmount(categoryLimit.Amount);
             if (error is not null)
             {
                 throw new InvalidOperationException($"Invalid category limit update: {error}.");
@@ -47,10 +47,10 @@ public sealed class LimiteCategoriaRepository : ILimiteCategoriaRepository
     }
 
     public async Task DeleteAsync(
-        LimiteCategoria limiteCategoria,
+        CategoryLimit categoryLimit,
         CancellationToken cancellationToken)
     {
-        _financeBotDbContext.LimiteCategorias.Remove(limiteCategoria);
+        _financeBotDbContext.CategoryLimits.Remove(categoryLimit);
         await _financeBotDbContext.SaveChangesAsync(cancellationToken);
     }
 }

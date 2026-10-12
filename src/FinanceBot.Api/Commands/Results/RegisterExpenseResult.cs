@@ -26,7 +26,7 @@ public sealed record SpendingPaceAlert(
     IReadOnlyList<CategorySpendingComparison> Categories);
 
 public sealed record CategorySpendingComparison(
-    Categoria Category, double CurrentTotal, double PreviousTotal, SpendingComparison Comparison);
+    Category Category, double CurrentTotal, double PreviousTotal, SpendingComparison Comparison);
 
 public abstract record SpendingComparison
 {

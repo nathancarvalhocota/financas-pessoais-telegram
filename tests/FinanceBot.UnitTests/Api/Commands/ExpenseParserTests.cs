@@ -7,10 +7,10 @@ namespace FinanceBot.UnitTests.Api.Commands;
 public sealed class ExpenseParserTests
 {
     [Theory]
-    [InlineData("/compra 58,90,  Almoco  , mÉr-ca do", 58.90, "Almoco", Categoria.Mercado)]
-    [InlineData("/COMPRA@FinanceBot 58.9, Almoco, SAÚDE", 58.9, "Almoco", Categoria.Saude)]
-    [InlineData("/compra 58, Almoco, Mercado", 58, "Almoco", Categoria.Mercado)]
-    public void Parse_ValidSyntax_ReturnsData(string text, double amount, string description, Categoria category)
+    [InlineData("/compra 58,90,  Almoco  , mÉr-ca do", 58.90, "Almoco", Category.Mercado)]
+    [InlineData("/COMPRA@FinanceBot 58.9, Almoco, SAÚDE", 58.9, "Almoco", Category.Saude)]
+    [InlineData("/compra 58, Almoco, Mercado", 58, "Almoco", Category.Mercado)]
+    public void Parse_ValidSyntax_ReturnsData(string text, double amount, string description, Category category)
     {
         var parsed = Assert.IsType<ExpenseParseResult.Success>(ExpenseParser.Parse(text));
 

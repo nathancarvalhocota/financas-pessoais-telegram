@@ -18,13 +18,13 @@ public sealed class CategoryLimitCommandHandler
         "^/limite(?:@[A-Za-z0-9_]+)?\\s+(\\S+)\\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
-    private readonly ICompraRepository _expenseRepository;
-    private readonly ILimiteCategoriaRepository _categoryLimitRepository;
+    private readonly IExpenseRepository _expenseRepository;
+    private readonly ICategoryLimitRepository _categoryLimitRepository;
     private readonly TimeProvider _timeProvider;
 
     public CategoryLimitCommandHandler(
-        ICompraRepository expenseRepository,
-        ILimiteCategoriaRepository categoryLimitRepository,
+        IExpenseRepository expenseRepository,
+        ICategoryLimitRepository categoryLimitRepository,
         TimeProvider timeProvider)
     {
         _expenseRepository = expenseRepository;
@@ -49,7 +49,7 @@ public sealed class CategoryLimitCommandHandler
         string categoryText = setLimitMatch.Groups[1].Value.Trim();
         string valueText = setLimitMatch.Groups[2].Value;
 
-        if (!CategoryCatalog.TryParse(categoryText, out Categoria category))
+        if (!CategoryCatalog.TryParse(categoryText, out Category category))
         {
             return new CategoryLimitResult.Failure(new CategoryLimitError.UnknownCategory(categoryText));
         }
@@ -67,7 +67,7 @@ public sealed class CategoryLimitCommandHandler
 
         if (value == 0)
         {
-            LimiteCategoria? existingLimit = await _categoryLimitRepository
+            CategoryLimit? existingLimit = await _categoryLimitRepository
                 .GetByCategoryAsync(category, cancellationToken);
 
             if (existingLimit is not null)
@@ -78,32 +78,32 @@ public sealed class CategoryLimitCommandHandler
             return new CategoryLimitResult.Removed(category);
         }
 
-        LimiteCategoriaCreationResult creation = LimiteCategoria.Criar(category, value);
-        if (creation is LimiteCategoriaCreationResult.Failure failure)
+        CategoryLimitCreationResult creation = CategoryLimit.Create(category, value);
+        if (creation is CategoryLimitCreationResult.Failure failure)
         {
             CategoryLimitError error = failure.Error switch
             {
-                LimiteCategoriaError.InvalidCategory => new CategoryLimitError.UnknownCategory(categoryText),
-                LimiteCategoriaError.InvalidValue => new CategoryLimitError.InvalidLimit(),
+                CategoryLimitValidationError.InvalidCategory => new CategoryLimitError.UnknownCategory(categoryText),
+                CategoryLimitValidationError.InvalidValue => new CategoryLimitError.InvalidLimit(),
                 _ => throw new ArgumentOutOfRangeException(nameof(failure.Error))
             };
             return new CategoryLimitResult.Failure(error);
         }
 
-        LimiteCategoria categoryLimit = ((LimiteCategoriaCreationResult.Success)creation).Limite;
+        CategoryLimit categoryLimit = ((CategoryLimitCreationResult.Success)creation).Limit;
         await _categoryLimitRepository.UpsertAsync(categoryLimit, cancellationToken);
-        return new CategoryLimitResult.Updated(category, categoryLimit.Valor);
+        return new CategoryLimitResult.Updated(category, categoryLimit.Amount);
     }
 
     private async Task<CategoryLimitResult> HandleGetAsync(Match getLimitMatch, CancellationToken cancellationToken)
     {
         string categoryText = getLimitMatch.Groups[1].Value.Trim();
-        if (!CategoryCatalog.TryParse(categoryText, out Categoria category))
+        if (!CategoryCatalog.TryParse(categoryText, out Category category))
         {
             return new CategoryLimitResult.Failure(new CategoryLimitError.UnknownCategory(categoryText));
         }
 
-        LimiteCategoria? categoryLimit = await _categoryLimitRepository
+        CategoryLimit? categoryLimit = await _categoryLimitRepository
             .GetByCategoryAsync(category, cancellationToken);
 
         if (categoryLimit is null)
@@ -115,15 +115,15 @@ public sealed class CategoryLimitCommandHandler
         var (periodStartUtc, periodEndExclusiveUtc) = DateTimeConverter.GetUtcPeriod(
             DateTimeConverter.GetBusinessDate(nowUtc));
 
-        IReadOnlyList<Compra> cycleExpenses = await _expenseRepository.ListByPeriodAsync(
+        IReadOnlyList<Expense> cycleExpenses = await _expenseRepository.ListByPeriodAsync(
             periodStartUtc,
             periodEndExclusiveUtc,
             cancellationToken);
 
         double totalSpending = cycleExpenses
-            .Where(expense => expense.Categoria == category)
-            .Sum(expense => expense.Valor);
+            .Where(expense => expense.Category == category)
+            .Sum(expense => expense.Amount);
 
-        return new CategoryLimitResult.Queried(category, categoryLimit.AvaliarProgresso(totalSpending));
+        return new CategoryLimitResult.Queried(category, categoryLimit.EvaluateProgress(totalSpending));
     }
 }

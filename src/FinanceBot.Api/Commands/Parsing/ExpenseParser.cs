@@ -23,7 +23,7 @@ public static class ExpenseParser
             return new ExpenseParseResult.Failure(new ExpenseParseError.InvalidAmount());
         if (string.IsNullOrWhiteSpace(description))
             return new ExpenseParseResult.Failure(new ExpenseParseError.MissingDescription());
-        if (!CategoryCatalog.TryParse(categoryText, out Categoria category))
+        if (!CategoryCatalog.TryParse(categoryText, out Category category))
             return new ExpenseParseResult.Failure(new ExpenseParseError.UnknownCategory(categoryText));
 
         return new ExpenseParseResult.Success(amount, description, category);
@@ -33,7 +33,7 @@ public static class ExpenseParser
 public abstract record ExpenseParseResult
 {
     private ExpenseParseResult() { }
-    public sealed record Success(double Amount, string Description, Categoria Category) : ExpenseParseResult;
+    public sealed record Success(double Amount, string Description, Category Category) : ExpenseParseResult;
     public sealed record Failure(ExpenseParseError Error) : ExpenseParseResult;
 }
 

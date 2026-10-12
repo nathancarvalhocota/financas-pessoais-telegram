@@ -7,9 +7,9 @@ public abstract record CategoryLimitResult
 {
     private CategoryLimitResult() { }
 
-    public sealed record Queried(Categoria Category, CategoryLimitProgress? Progress) : CategoryLimitResult;
-    public sealed record Updated(Categoria Category, double Value) : CategoryLimitResult;
-    public sealed record Removed(Categoria Category) : CategoryLimitResult;
+    public sealed record Queried(Category Category, CategoryLimitProgress? Progress) : CategoryLimitResult;
+    public sealed record Updated(Category Category, double Value) : CategoryLimitResult;
+    public sealed record Removed(Category Category) : CategoryLimitResult;
     public sealed record Failure(CategoryLimitError Error) : CategoryLimitResult;
 }
 

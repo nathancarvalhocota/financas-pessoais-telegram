@@ -12,10 +12,10 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_WithPurchaseAndUnknownCategory_ReturnsCategoryOptionsMessage()
     {
-        InMemoryCompraRepository inMemoryCompraRepository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository inMemoryExpenseRepository = new InMemoryExpenseRepository();
         TelegramCommandRouter telegramCommandRouter = new TelegramCommandRouter(
-            inMemoryCompraRepository,
-            new InMemoryLimiteCategoriaRepository());
+            inMemoryExpenseRepository,
+            new InMemoryCategoryLimitRepository());
 
         string response = await telegramCommandRouter.RouteMessageAsync(
             "/compra 200, teste, teste",
@@ -31,10 +31,10 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_WithPurchaseMentionAndUnknownCategory_ReturnsCategoryOptionsMessage()
     {
-        InMemoryCompraRepository inMemoryCompraRepository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository inMemoryExpenseRepository = new InMemoryExpenseRepository();
         TelegramCommandRouter telegramCommandRouter = new TelegramCommandRouter(
-            inMemoryCompraRepository,
-            new InMemoryLimiteCategoriaRepository());
+            inMemoryExpenseRepository,
+            new InMemoryCategoryLimitRepository());
 
         string response = await telegramCommandRouter.RouteMessageAsync(
             "/compra@FinanceBot 200, teste, teste",
@@ -49,9 +49,9 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_WithLimitDefined_ReturnsConfirmationWithValue()
     {
-        InMemoryLimiteCategoriaRepository limiteRepository = new InMemoryLimiteCategoriaRepository();
+        InMemoryCategoryLimitRepository limiteRepository = new InMemoryCategoryLimitRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
-            new InMemoryCompraRepository(),
+            new InMemoryExpenseRepository(),
             limiteRepository);
 
         string response = await router.RouteMessageAsync(
@@ -66,9 +66,9 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_WithLimitZero_RemovesLimit()
     {
-        InMemoryLimiteCategoriaRepository limiteRepository = new InMemoryLimiteCategoriaRepository();
+        InMemoryCategoryLimitRepository limiteRepository = new InMemoryCategoryLimitRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
-            new InMemoryCompraRepository(),
+            new InMemoryExpenseRepository(),
             limiteRepository);
 
         // Define primeiro
@@ -81,8 +81,8 @@ public sealed class TelegramCommandRouterTests
             CancellationToken.None);
 
         Assert.Contains("Limite de Mercado removido", response);
-        LimiteCategoria? limite = await limiteRepository.GetByCategoryAsync(
-            Categoria.Mercado,
+        CategoryLimit? limite = await limiteRepository.GetByCategoryAsync(
+            Category.Mercado,
             CancellationToken.None);
         Assert.Null(limite);
     }
@@ -91,8 +91,8 @@ public sealed class TelegramCommandRouterTests
     public async Task RouteAsync_WithLimitInvalidCategory_ReturnsError()
     {
         TelegramCommandRouter router = new TelegramCommandRouter(
-            new InMemoryCompraRepository(),
-            new InMemoryLimiteCategoriaRepository());
+            new InMemoryExpenseRepository(),
+            new InMemoryCategoryLimitRepository());
 
         string response = await router.RouteMessageAsync(
             "/limite categoriaInexistente 100",
@@ -106,9 +106,9 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_WithPurchaseAndLimit_ShowsProgressInResponse()
     {
-        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
-        InMemoryLimiteCategoriaRepository limiteRepository = new InMemoryLimiteCategoriaRepository();
-        TelegramCommandRouter router = new TelegramCommandRouter(compraRepository, limiteRepository);
+        InMemoryExpenseRepository expenseRepository = new InMemoryExpenseRepository();
+        InMemoryCategoryLimitRepository limiteRepository = new InMemoryCategoryLimitRepository();
+        TelegramCommandRouter router = new TelegramCommandRouter(expenseRepository, limiteRepository);
 
         // Define limite
         await router.RouteMessageAsync("/limite Mercado 800", DateTimeOffset.UtcNow, CancellationToken.None);
@@ -127,9 +127,9 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_WithPurchaseExceedingLimit_ShowsAlert()
     {
-        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
-        InMemoryLimiteCategoriaRepository limiteRepository = new InMemoryLimiteCategoriaRepository();
-        TelegramCommandRouter router = new TelegramCommandRouter(compraRepository, limiteRepository);
+        InMemoryExpenseRepository expenseRepository = new InMemoryExpenseRepository();
+        InMemoryCategoryLimitRepository limiteRepository = new InMemoryCategoryLimitRepository();
+        TelegramCommandRouter router = new TelegramCommandRouter(expenseRepository, limiteRepository);
 
         DateTimeOffset now = DateTimeOffset.UtcNow;
 
@@ -154,8 +154,8 @@ public sealed class TelegramCommandRouterTests
     public async Task RouteAsync_WithPurchaseWithoutLimit_DoesNotShowProgress()
     {
         TelegramCommandRouter router = new TelegramCommandRouter(
-            new InMemoryCompraRepository(),
-            new InMemoryLimiteCategoriaRepository());
+            new InMemoryExpenseRepository(),
+            new InMemoryCategoryLimitRepository());
 
         string response = await router.RouteMessageAsync(
             "/compra 50, Cafe, Mercado",
@@ -173,10 +173,10 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_ListInclusion_ShowsOnlyGivenCategories()
     {
-        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository expenseRepository = new InMemoryExpenseRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
-            compraRepository,
-            new InMemoryLimiteCategoriaRepository());
+            expenseRepository,
+            new InMemoryCategoryLimitRepository());
 
         await router.RouteMessageAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
         await router.RouteMessageAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
@@ -194,10 +194,10 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_ListInclusionWithoutDate_UsesCurrentMonthAndFilters()
     {
-        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository expenseRepository = new InMemoryExpenseRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
-            compraRepository,
-            new InMemoryLimiteCategoriaRepository());
+            expenseRepository,
+            new InMemoryCategoryLimitRepository());
 
         await router.RouteMessageAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
         await router.RouteMessageAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
@@ -215,8 +215,8 @@ public sealed class TelegramCommandRouterTests
     public async Task RouteAsync_ListInvalidCategory_ReturnsError()
     {
         TelegramCommandRouter router = new TelegramCommandRouter(
-            new InMemoryCompraRepository(),
-            new InMemoryLimiteCategoriaRepository());
+            new InMemoryExpenseRepository(),
+            new InMemoryCategoryLimitRepository());
 
         string response = await router.RouteMessageAsync(
             "/listar 04/26 categoriaInexistente",
@@ -230,10 +230,10 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_ListInclusionWithoutResults_ReturnsFilteredMessage()
     {
-        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository expenseRepository = new InMemoryExpenseRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
-            compraRepository,
-            new InMemoryLimiteCategoriaRepository());
+            expenseRepository,
+            new InMemoryCategoryLimitRepository());
 
         await router.RouteMessageAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
 
@@ -248,10 +248,10 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_ListExclusion_OmitsGivenCategories()
     {
-        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository expenseRepository = new InMemoryExpenseRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
-            compraRepository,
-            new InMemoryLimiteCategoriaRepository());
+            expenseRepository,
+            new InMemoryCategoryLimitRepository());
 
         await router.RouteMessageAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
         await router.RouteMessageAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
@@ -270,8 +270,8 @@ public sealed class TelegramCommandRouterTests
     public async Task RouteAsync_ListExclusionWithoutCategory_ReturnsError()
     {
         TelegramCommandRouter router = new TelegramCommandRouter(
-            new InMemoryCompraRepository(),
-            new InMemoryLimiteCategoriaRepository());
+            new InMemoryExpenseRepository(),
+            new InMemoryCategoryLimitRepository());
 
         string response = await router.RouteMessageAsync(
             "/listar 04/26 sem",
@@ -284,10 +284,10 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_ListExclusionWithoutResults_ReturnsFilteredMessage()
     {
-        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository expenseRepository = new InMemoryExpenseRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
-            compraRepository,
-            new InMemoryLimiteCategoriaRepository());
+            expenseRepository,
+            new InMemoryCategoryLimitRepository());
 
         await router.RouteMessageAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
 
@@ -303,8 +303,8 @@ public sealed class TelegramCommandRouterTests
     public async Task RouteAsync_Info_DocumentsListFilter()
     {
         TelegramCommandRouter router = new TelegramCommandRouter(
-            new InMemoryCompraRepository(),
-            new InMemoryLimiteCategoriaRepository());
+            new InMemoryExpenseRepository(),
+            new InMemoryCategoryLimitRepository());
 
         string response = await router.RouteMessageAsync(
             "/info",
@@ -319,10 +319,10 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_ListWithoutFilter_KeepsHeaderAndListsAll()
     {
-        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository expenseRepository = new InMemoryExpenseRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
-            compraRepository,
-            new InMemoryLimiteCategoriaRepository());
+            expenseRepository,
+            new InMemoryCategoryLimitRepository());
 
         await router.RouteMessageAsync("/compra 100, Pao, Mercado", AbrilDeVinteSeis, CancellationToken.None);
         await router.RouteMessageAsync("/compra 50, Cinema, Lazer", AbrilDeVinteSeis, CancellationToken.None);
@@ -341,10 +341,10 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_ListWithExplicitDateRange_ReturnsOnlyPurchasesInsideInclusiveRange()
     {
-        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository expenseRepository = new InMemoryExpenseRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
-            compraRepository,
-            new InMemoryLimiteCategoriaRepository());
+            expenseRepository,
+            new InMemoryCategoryLimitRepository());
 
         await router.RouteMessageAsync("/compra 10, Primeiro, Mercado", new DateTimeOffset(2026, 2, 10, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
         await router.RouteMessageAsync("/compra 20, Segundo, Uber", new DateTimeOffset(2026, 2, 20, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
@@ -366,8 +366,8 @@ public sealed class TelegramCommandRouterTests
     public async Task RouteAsync_ListWithInvertedDateRange_ReturnsSpecificError()
     {
         TelegramCommandRouter router = new TelegramCommandRouter(
-            new InMemoryCompraRepository(),
-            new InMemoryLimiteCategoriaRepository());
+            new InMemoryExpenseRepository(),
+            new InMemoryCategoryLimitRepository());
 
         string response = await router.RouteMessageAsync(
             "/listar 20/02/26 - 10/02/2026",
@@ -380,10 +380,10 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_WhenCycleTotalCrossesWarning_ReturnsAlertForAllCategories()
     {
-        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository expenseRepository = new InMemoryExpenseRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
-            compraRepository,
-            new InMemoryLimiteCategoriaRepository());
+            expenseRepository,
+            new InMemoryCategoryLimitRepository());
 
         DateTimeOffset previousCycleDate = new DateTimeOffset(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);
         DateTimeOffset currentCycleDate = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
@@ -406,10 +406,10 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_WhenCycleTotalCrossesDanger_DoesNotRepeatItOnLaterPurchases()
     {
-        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository expenseRepository = new InMemoryExpenseRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
-            compraRepository,
-            new InMemoryLimiteCategoriaRepository());
+            expenseRepository,
+            new InMemoryCategoryLimitRepository());
 
         DateTimeOffset previousCycleDate = new DateTimeOffset(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);
         DateTimeOffset currentCycleDate = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
@@ -425,10 +425,10 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_WhenCycleTotalCrossesTwoHundredPercent_ReturnsUrgentAlert()
     {
-        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository expenseRepository = new InMemoryExpenseRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
-            compraRepository,
-            new InMemoryLimiteCategoriaRepository());
+            expenseRepository,
+            new InMemoryCategoryLimitRepository());
 
         DateTimeOffset previousCycleDate = new DateTimeOffset(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);
         DateTimeOffset currentCycleDate = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
@@ -448,10 +448,10 @@ public sealed class TelegramCommandRouterTests
     [Fact]
     public async Task RouteAsync_PurchaseAtElevenPmInSaoPauloOnTheFourteenth_RemainsInCurrentCycle()
     {
-        InMemoryCompraRepository compraRepository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository expenseRepository = new InMemoryExpenseRepository();
         TelegramCommandRouter router = new TelegramCommandRouter(
-            compraRepository,
-            new InMemoryLimiteCategoriaRepository());
+            expenseRepository,
+            new InMemoryCategoryLimitRepository());
 
         DateTimeOffset elevenPmInSaoPauloAsUtc = new DateTimeOffset(2026, 7, 15, 2, 0, 0, TimeSpan.Zero);
         await router.RouteMessageAsync(
@@ -477,9 +477,9 @@ public sealed class TelegramCommandRouterTests
     {
         DateTime startUtc = DateTimeOffset.Parse(startText).UtcDateTime;
         DateTime endExclusiveUtc = DateTimeOffset.Parse(endExclusiveText).UtcDateTime;
-        InMemoryCompraRepository repository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository repository = new InMemoryExpenseRepository();
         await SeedPeriodBoundariesAsync(repository, startUtc, endExclusiveUtc);
-        TelegramCommandRouter router = new TelegramCommandRouter(repository, new InMemoryLimiteCategoriaRepository());
+        TelegramCommandRouter router = new TelegramCommandRouter(repository, new InMemoryCategoryLimitRepository());
 
         string response = await router.RouteMessageAsync(command, AbrilDeVinteSeis, CancellationToken.None);
 
@@ -503,9 +503,9 @@ public sealed class TelegramCommandRouterTests
     {
         DateTime startUtc = DateTimeOffset.Parse(startText).UtcDateTime;
         DateTime endExclusiveUtc = DateTimeOffset.Parse(endExclusiveText).UtcDateTime;
-        InMemoryCompraRepository repository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository repository = new InMemoryExpenseRepository();
         await SeedPeriodBoundariesAsync(repository, startUtc, endExclusiveUtc);
-        TelegramCommandRouter router = new TelegramCommandRouter(repository, new InMemoryLimiteCategoriaRepository());
+        TelegramCommandRouter router = new TelegramCommandRouter(repository, new InMemoryCategoryLimitRepository());
 
         string response = await router.RouteMessageAsync("/listar", DateTimeOffset.Parse(messageDateText), CancellationToken.None);
 
@@ -523,15 +523,15 @@ public sealed class TelegramCommandRouterTests
         DateTime endExclusiveUtc = new DateTime(2019, 3, 15, 3, 0, 0, DateTimeKind.Utc);
         DateTime previousStartUtc = new DateTime(2019, 1, 15, 2, 0, 0, DateTimeKind.Utc);
         DateTimeOffset messageDate = new DateTimeOffset(2019, 2, 17, 3, 0, 0, TimeSpan.Zero);
-        InMemoryCompraRepository repository = new InMemoryCompraRepository();
-        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(10, "Inicio atual", Categoria.Mercado, startUtc)).Compra, CancellationToken.None);
-        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(20, "Fim atual", Categoria.Mercado, endExclusiveUtc.AddTicks(-1))).Compra, CancellationToken.None);
-        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(999, "Proximo ciclo", Categoria.Mercado, endExclusiveUtc)).Compra, CancellationToken.None);
-        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(40, "Inicio anterior", Categoria.Mercado, previousStartUtc)).Compra, CancellationToken.None);
-        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(60, "Fim anterior", Categoria.Mercado, startUtc.AddTicks(-1))).Compra, CancellationToken.None);
-        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(999, "Antes do ciclo anterior", Categoria.Mercado, previousStartUtc.AddTicks(-1))).Compra, CancellationToken.None);
-        InMemoryLimiteCategoriaRepository limits = new InMemoryLimiteCategoriaRepository();
-        await limits.UpsertAsync(Assert.IsType<LimiteCategoriaCreationResult.Success>(LimiteCategoria.Criar(Categoria.Mercado, 1000)).Limite, CancellationToken.None);
+        InMemoryExpenseRepository repository = new InMemoryExpenseRepository();
+        await repository.AddAsync(Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(10, "Inicio atual", Category.Mercado, startUtc)).Expense, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(20, "Fim atual", Category.Mercado, endExclusiveUtc.AddTicks(-1))).Expense, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(999, "Proximo ciclo", Category.Mercado, endExclusiveUtc)).Expense, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(40, "Inicio anterior", Category.Mercado, previousStartUtc)).Expense, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(60, "Fim anterior", Category.Mercado, startUtc.AddTicks(-1))).Expense, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(999, "Antes do ciclo anterior", Category.Mercado, previousStartUtc.AddTicks(-1))).Expense, CancellationToken.None);
+        InMemoryCategoryLimitRepository limits = new InMemoryCategoryLimitRepository();
+        await limits.UpsertAsync(Assert.IsType<CategoryLimitCreationResult.Success>(CategoryLimit.Create(Category.Mercado, 1000)).Limit, CancellationToken.None);
         TelegramCommandRouter router = new TelegramCommandRouter(repository, limits);
 
         string response = await router.RouteMessageAsync("/compra 100, Nova compra, Mercado", messageDate, CancellationToken.None);
@@ -542,8 +542,8 @@ public sealed class TelegramCommandRouterTests
         Assert.Contains("Ciclo anterior (15/01/2019 a 14/02/2019): R$ 100,00", response);
         Assert.Contains("Gasto atual: 130% do ciclo anterior (+R$ 30,00).", response);
         Assert.Equal(new[] { (startUtc, endExclusiveUtc), (previousStartUtc, startUtc) }, repository.QueriedPeriods);
-        Compra saved = Assert.Single(repository.Compras, compra => compra.Descricao == "Nova compra");
-        Assert.Equal(messageDate.UtcDateTime, saved.Data);
+        Expense saved = Assert.Single(repository.Expenses, expense => expense.Description == "Nova compra");
+        Assert.Equal(messageDate.UtcDateTime, saved.DateUtc);
     }
 
     [Theory]
@@ -554,11 +554,11 @@ public sealed class TelegramCommandRouterTests
     {
         DateTime startUtc = DateTimeOffset.Parse(startText).UtcDateTime;
         DateTime endExclusiveUtc = DateTimeOffset.Parse(endExclusiveText).UtcDateTime;
-        InMemoryCompraRepository repository = new InMemoryCompraRepository();
+        InMemoryExpenseRepository repository = new InMemoryExpenseRepository();
         await SeedPeriodBoundariesAsync(repository, startUtc, endExclusiveUtc);
-        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(500, "Outra categoria", Categoria.Uber, startUtc)).Compra, CancellationToken.None);
-        InMemoryLimiteCategoriaRepository limits = new InMemoryLimiteCategoriaRepository();
-        await limits.UpsertAsync(Assert.IsType<LimiteCategoriaCreationResult.Success>(LimiteCategoria.Criar(Categoria.Mercado, 100)).Limite, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(500, "Outra categoria", Category.Uber, startUtc)).Expense, CancellationToken.None);
+        InMemoryCategoryLimitRepository limits = new InMemoryCategoryLimitRepository();
+        await limits.UpsertAsync(Assert.IsType<CategoryLimitCreationResult.Success>(CategoryLimit.Create(Category.Mercado, 100)).Limit, CancellationToken.None);
         TelegramCommandRouter router = new TelegramCommandRouter(
             new RegisterExpenseCommandHandler(repository, limits),
             new ListExpensesCommandHandler(repository),
@@ -571,12 +571,12 @@ public sealed class TelegramCommandRouterTests
         Assert.Equal("Mercado: R$ 30,00 de R$ 100,00 (30%)", response);
     }
 
-    private static async Task SeedPeriodBoundariesAsync(InMemoryCompraRepository repository, DateTime startUtc, DateTime endExclusiveUtc)
+    private static async Task SeedPeriodBoundariesAsync(InMemoryExpenseRepository repository, DateTime startUtc, DateTime endExclusiveUtc)
     {
-        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(999, "Antes do inicio", Categoria.Mercado, startUtc.AddTicks(-1))).Compra, CancellationToken.None);
-        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(10, "Inicio incluido", Categoria.Mercado, startUtc)).Compra, CancellationToken.None);
-        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(20, "Ultimo instante", Categoria.Mercado, endExclusiveUtc.AddTicks(-1))).Compra, CancellationToken.None);
-        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(999, "Fim excluido", Categoria.Mercado, endExclusiveUtc)).Compra, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(999, "Antes do inicio", Category.Mercado, startUtc.AddTicks(-1))).Expense, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(10, "Inicio incluido", Category.Mercado, startUtc)).Expense, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(20, "Ultimo instante", Category.Mercado, endExclusiveUtc.AddTicks(-1))).Expense, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(999, "Fim excluido", Category.Mercado, endExclusiveUtc)).Expense, CancellationToken.None);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
@@ -584,82 +584,82 @@ public sealed class TelegramCommandRouterTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private sealed class InMemoryCompraRepository : ICompraRepository
+    private sealed class InMemoryExpenseRepository : IExpenseRepository
     {
-        public List<Compra> Compras { get; } = new List<Compra>();
+        public List<Expense> Expenses { get; } = new List<Expense>();
         public List<(DateTime StartUtc, DateTime EndExclusiveUtc)> QueriedPeriods { get; } = new();
         private int _nextId = 1;
 
-        public Task AddAsync(Compra compra, CancellationToken cancellationToken)
+        public Task AddAsync(Expense expense, CancellationToken cancellationToken)
         {
-            if (compra.Id == 0)
+            if (expense.Id == 0)
             {
-                typeof(Compra).GetProperty(nameof(Compra.Id))!.SetValue(compra, _nextId++);
+                typeof(Expense).GetProperty(nameof(Expense.Id))!.SetValue(expense, _nextId++);
             }
 
-            Compras.Add(compra);
+            Expenses.Add(expense);
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyList<Compra>> ListByPeriodAsync(
+        public Task<IReadOnlyList<Expense>> ListByPeriodAsync(
             DateTime periodStartUtc,
             DateTime periodEndExclusiveUtc,
             CancellationToken cancellationToken)
         {
             QueriedPeriods.Add((periodStartUtc, periodEndExclusiveUtc));
-            IReadOnlyList<Compra> compras = Compras
-                .Where(compra => compra.Data >= periodStartUtc && compra.Data < periodEndExclusiveUtc)
-                .OrderByDescending(compra => compra.Data)
+            IReadOnlyList<Expense> expenses = Expenses
+                .Where(expense => expense.DateUtc >= periodStartUtc && expense.DateUtc < periodEndExclusiveUtc)
+                .OrderByDescending(expense => expense.DateUtc)
                 .ToList();
-            return Task.FromResult(compras);
+            return Task.FromResult(expenses);
         }
 
-        public Task<Compra?> FindByIdAsync(int compraId, CancellationToken cancellationToken)
+        public Task<Expense?> FindByIdAsync(int expenseId, CancellationToken cancellationToken)
         {
-            Compra? compra = Compras.FirstOrDefault(entity => entity.Id == compraId);
-            return Task.FromResult(compra);
+            Expense? expense = Expenses.FirstOrDefault(entity => entity.Id == expenseId);
+            return Task.FromResult(expense);
         }
 
-        public Task DeleteAsync(Compra compra, CancellationToken cancellationToken)
+        public Task DeleteAsync(Expense expense, CancellationToken cancellationToken)
         {
-            Compras.Remove(compra);
+            Expenses.Remove(expense);
             return Task.CompletedTask;
         }
     }
 
-    private sealed class InMemoryLimiteCategoriaRepository : ILimiteCategoriaRepository
+    private sealed class InMemoryCategoryLimitRepository : ICategoryLimitRepository
     {
-        private readonly List<LimiteCategoria> _limites = new List<LimiteCategoria>();
-        public Task<LimiteCategoria?> GetByCategoryAsync(
-            Categoria categoria,
+        private readonly List<CategoryLimit> _limites = new List<CategoryLimit>();
+        public Task<CategoryLimit?> GetByCategoryAsync(
+            Category category,
             CancellationToken cancellationToken)
         {
-            LimiteCategoria? limite = _limites.FirstOrDefault(l => l.Categoria == categoria);
+            CategoryLimit? limite = _limites.FirstOrDefault(l => l.Category == category);
             return Task.FromResult(limite);
         }
 
         public Task UpsertAsync(
-            LimiteCategoria limiteCategoria,
+            CategoryLimit categoryLimit,
             CancellationToken cancellationToken)
         {
-            LimiteCategoria? existing = _limites.FirstOrDefault(l => l.Categoria == limiteCategoria.Categoria);
+            CategoryLimit? existing = _limites.FirstOrDefault(l => l.Category == categoryLimit.Category);
             if (existing is null)
             {
-                _limites.Add(limiteCategoria);
+                _limites.Add(categoryLimit);
             }
             else
             {
-                Assert.Null(existing.AlterarValor(limiteCategoria.Valor));
+                Assert.Null(existing.UpdateAmount(categoryLimit.Amount));
             }
 
             return Task.CompletedTask;
         }
 
         public Task DeleteAsync(
-            LimiteCategoria limiteCategoria,
+            CategoryLimit categoryLimit,
             CancellationToken cancellationToken)
         {
-            _limites.Remove(limiteCategoria);
+            _limites.Remove(categoryLimit);
             return Task.CompletedTask;
         }
     }
