@@ -49,10 +49,10 @@ public sealed class TelegramCommandRouter
                 command.Text,
                 messageDateUtc,
                 cancellationToken)),
-            "/listar" => await _listExpensesCommandHandler.HandleListExpensesAsync(
+            "/listar" => ExpenseListFormatter.Format(await _listExpensesCommandHandler.HandleListExpensesAsync(
                 command.Text,
                 messageDateUtc,
-                cancellationToken),
+                cancellationToken)),
             "/deletar" => DeleteExpenseFormatter.Format(await _deleteExpenseCommandHandler.HandleDeleteExpenseAsync(
                 command.Text,
                 cancellationToken)),

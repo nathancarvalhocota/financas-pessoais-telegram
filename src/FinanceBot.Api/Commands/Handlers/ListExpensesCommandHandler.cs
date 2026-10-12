@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
-using FinanceBot.Api.Commands.Formatting;
 using FinanceBot.Api.Commands.Parsing;
+using FinanceBot.Api.Commands.Results;
 using FinanceBot.Domain.Expenses;
 
 namespace FinanceBot.Api.Commands.Handlers;
@@ -18,7 +18,7 @@ public sealed class ListExpensesCommandHandler
         _expenseRepository = expenseRepository;
     }
 
-    public async Task<string> HandleListExpensesAsync(
+    public async Task<ListExpensesResult> HandleListExpensesAsync(
         string messageText,
         DateTimeOffset messageDateUtc,
         CancellationToken cancellationToken)
@@ -26,24 +26,41 @@ public sealed class ListExpensesCommandHandler
         Match commandMatch = ListExpensesCommandRegex.Match(messageText);
         if (!commandMatch.Success)
         {
-            return "Uso correto: /listar <MM/YY>. Exemplo: /listar 09/26";
+            return new ListExpensesResult.Failure(new ListExpensesError.InvalidSyntax());
         }
 
         ExpenseListQueryParseResult parseResult = ExpenseListQueryParser.Parse(
             commandMatch.Groups[1].Value.Trim(),
             messageDateUtc);
 
-        if (!parseResult.IsSuccess)
+        if (parseResult is ExpenseListQueryParseResult.Failure failure)
         {
-            return parseResult.ErrorMessage!;
+            return new ListExpensesResult.Failure(failure.Error);
         }
 
-        ExpenseListQuery query = parseResult.Query!;
+        ExpenseListQuery query = ((ExpenseListQueryParseResult.Success)parseResult).Query;
         IReadOnlyList<Compra> expenses = await _expenseRepository.ListByPeriodAsync(
             query.PeriodStartUtc,
             query.PeriodEndExclusiveUtc,
             cancellationToken);
 
-        return ExpenseListFormatter.Format(query, expenses);
+        List<ExpenseItem> items = new();
+        double total = 0;
+        foreach (Compra expense in expenses)
+        {
+            bool included = query.CategoryFilter.Mode switch
+            {
+                CategoryFilterMode.None => true,
+                CategoryFilterMode.Include => query.CategoryFilter.Categories.Contains(expense.Categoria),
+                CategoryFilterMode.Exclude => !query.CategoryFilter.Categories.Contains(expense.Categoria),
+                _ => false
+            };
+            if (!included) continue;
+
+            items.Add(ExpenseItem.From(expense));
+            total += expense.Valor;
+        }
+
+        return new ListExpensesResult.Success(query.Period, query.CategoryFilter, items, total);
     }
 }

@@ -1,55 +1,73 @@
 using System.Text;
-using FinanceBot.Api.Commands.Parsing;
+using FinanceBot.Api.Commands.Results;
 using FinanceBot.Domain.Categories;
-using FinanceBot.Domain.Expenses;
 
 namespace FinanceBot.Api.Commands.Formatting;
 
-internal static class ExpenseListFormatter
+public static class ExpenseListFormatter
 {
-    public static string Format(ExpenseListQuery query, IReadOnlyList<Compra> expenses)
+    public static string Format(ListExpensesResult result) => result switch
     {
-        IReadOnlyList<Compra> filteredExpenses = expenses
-            .Where(expense => query.CategoryFilter.Includes(expense.Categoria))
-            .ToList();
+        ListExpensesResult.Success success => FormatSuccess(success),
+        ListExpensesResult.Failure failure => FormatError(failure.Error),
+        _ => throw new ArgumentOutOfRangeException(nameof(result))
+    };
 
-        if (filteredExpenses.Count == 0)
+    private static string FormatSuccess(ListExpensesResult.Success result)
+    {
+        if (result.Items.Count == 0)
         {
-            return FormatEmptyList(query);
+            return FormatEmptyList(result);
         }
 
-        string headerSuffix = query.CategoryFilter.Mode == CategoryFilterMode.None
+        string headerSuffix = result.Filter.Mode == CategoryFilterMode.None
             ? string.Empty
-            : $" ({FormatFilter(query.CategoryFilter)})";
+            : $" ({FormatFilter(result.Filter)})";
 
         StringBuilder messageBuilder = new StringBuilder();
-        messageBuilder.AppendLine($"Compras de {query.PeriodDescription}{headerSuffix}:");
+        messageBuilder.AppendLine($"Compras de {FormatPeriod(result.Period)}{headerSuffix}:");
 
-        double totalValue = 0;
-        foreach (Compra expense in filteredExpenses)
+        foreach (ExpenseItem expense in result.Items)
         {
-            totalValue += expense.Valor;
-            string categoryDisplayName = CategoryCatalog.GetDisplayName(expense.Categoria);
+            string categoryDisplayName = CategoryCatalog.GetDisplayName(expense.Category);
             messageBuilder.AppendLine();
-            messageBuilder.AppendLine($"[{expense.Id}] {categoryDisplayName} — R$ {BrazilianCurrencyFormatter.FormatAmount(expense.Valor)}");
-            messageBuilder.AppendLine($"    {expense.Descricao} · {expense.Data:dd/MM HH:mm}");
+            messageBuilder.AppendLine($"[{expense.Id}] {categoryDisplayName} — R$ {BrazilianCurrencyFormatter.FormatAmount(expense.Amount)}");
+            messageBuilder.AppendLine($"    {expense.Description} · {expense.DateUtc:dd/MM HH:mm}");
         }
 
-        messageBuilder.Append($"\nTotal: R$ {BrazilianCurrencyFormatter.FormatAmount(totalValue)}");
+        messageBuilder.Append($"\nTotal: R$ {BrazilianCurrencyFormatter.FormatAmount(result.Total)}");
         return messageBuilder.ToString();
     }
 
-    private static string FormatEmptyList(ExpenseListQuery query)
+    private static string FormatEmptyList(ListExpensesResult.Success result)
     {
-        return query.CategoryFilter.Mode switch
+        return result.Filter.Mode switch
         {
             CategoryFilterMode.Include =>
-                $"Nenhuma compra de {FormatFilter(query.CategoryFilter)} de {query.PeriodDescription}.",
+                $"Nenhuma compra de {FormatFilter(result.Filter)} de {FormatPeriod(result.Period)}.",
             CategoryFilterMode.Exclude =>
-                $"Nenhuma compra de {query.PeriodDescription} ({FormatFilter(query.CategoryFilter)}).",
-            _ => $"Nenhuma compra encontrada de {query.PeriodDescription}."
+                $"Nenhuma compra de {FormatPeriod(result.Period)} ({FormatFilter(result.Filter)}).",
+            _ => $"Nenhuma compra encontrada de {FormatPeriod(result.Period)}."
         };
     }
+
+    private static string FormatPeriod(ExpensePeriod period) => period.Kind switch
+    {
+        ExpensePeriodKind.BillingCycle => $"{period.StartDate:dd/MM} a {period.EndDateInclusive:dd/MM}",
+        ExpensePeriodKind.DateRange => $"{period.StartDate:dd/MM/yyyy} a {period.EndDateInclusive:dd/MM/yyyy}",
+        _ => throw new ArgumentOutOfRangeException(nameof(period))
+    };
+
+    private static string FormatError(ListExpensesError error) => error switch
+    {
+        ListExpensesError.InvalidSyntax => "Uso correto: /listar <MM/YY>. Exemplo: /listar 09/26",
+        ListExpensesError.InvalidDate => "Data invalida. Use DD/MM/AA ou DD/MM/AAAA. Exemplo: /listar 10/02/26 - 20/02/2026",
+        ListExpensesError.InvalidMonth => "Mes/ano invalido. Use o formato MM/YY, exemplo: 09/26",
+        ListExpensesError.InvertedPeriod => "Data inicial nao pode ser posterior a data final.",
+        ListExpensesError.MissingExcludedCategories => "Informe ao menos uma categoria após 'sem'. Exemplo: /listar sem Mercado",
+        ListExpensesError.UnknownCategory unknown => CategoryCommandMessages.InvalidCategory(unknown.Text),
+        _ => throw new ArgumentOutOfRangeException(nameof(error))
+    };
 
     private static string FormatFilter(CategoryFilter filter)
     {

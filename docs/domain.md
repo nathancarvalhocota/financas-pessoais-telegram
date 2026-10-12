@@ -18,7 +18,7 @@ Em `/listar MM/YY`, `MM/YY` indica o mês em que o ciclo começa: `/listar 04/26
 
 Filtros com datas explícitas aceitam os dois dias informados. As consultas usam o intervalo UTC `[início, fim exclusivo)`: incluem compras com `Data >= início` e excluem aquelas com `Data >= fim exclusivo`. `DateTimeConverter` calcula o início do dia seguinte ao último dia no calendário de São Paulo e só então converte esse limite para UTC, respeitando mudanças históricas de offset. Não acrescenta um dia depois da conversão UTC.
 
-No ciclo de 15/04 a 14/05, o fim exclusivo da consulta é o início de 15/05 em São Paulo. As datas apresentadas nos cabeçalhos e alertas continuam inclusivas; a ordenação decrescente e o fuso de exibição dos instantes das compras não mudam.
+No ciclo de 15/04 a 14/05, o fim exclusivo da consulta é o início de 15/05 em São Paulo. As datas apresentadas nos cabeçalhos e alertas continuam inclusivas. A listagem conserva a ordenação decrescente recebida do repositório e exibe o instante UTC de cada compra sem conversão para São Paulo: por exemplo, uma compra de 15/05/2026 às 02:59 UTC ainda pertence ao dia 14/05 no calendário de negócio e aparece como `15/05 02:59`.
 
 ## Limites por categoria
 

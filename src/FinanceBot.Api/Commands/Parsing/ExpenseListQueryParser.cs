@@ -1,58 +1,27 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using FinanceBot.Api.Commands;
-using FinanceBot.Api.Commands.Formatting;
+using FinanceBot.Api.Commands.Results;
 using FinanceBot.Domain.Categories;
 using FinanceBot.Domain.Billing;
 
 namespace FinanceBot.Api.Commands.Parsing;
 
-internal enum CategoryFilterMode
-{
-    None,
-    Include,
-    Exclude
-}
-
-internal sealed record CategoryFilter(CategoryFilterMode Mode, IReadOnlyList<Categoria> Categories)
-{
-    public bool Includes(Categoria category)
-    {
-        return Mode switch
-        {
-            CategoryFilterMode.None => true,
-            CategoryFilterMode.Include => Categories.Contains(category),
-            CategoryFilterMode.Exclude => !Categories.Contains(category),
-            _ => false
-        };
-    }
-}
-
-internal sealed record ExpenseListQuery(
+public sealed record ExpenseListQuery(
     DateTime PeriodStartUtc,
     DateTime PeriodEndExclusiveUtc,
-    string PeriodDescription,
+    ExpensePeriod Period,
     CategoryFilter CategoryFilter);
 
-internal sealed record ExpenseListQueryParseResult(
-    ExpenseListQuery? Query,
-    string? ErrorMessage)
+public abstract record ExpenseListQueryParseResult
 {
-    public bool IsSuccess => Query is not null;
+    private ExpenseListQueryParseResult() { }
 
-    public static ExpenseListQueryParseResult Success(ExpenseListQuery query)
-    {
-        return new ExpenseListQueryParseResult(query, null);
-    }
-
-    public static ExpenseListQueryParseResult Failure(string errorMessage)
-    {
-        return new ExpenseListQueryParseResult(null, errorMessage);
-    }
+    public sealed record Success(ExpenseListQuery Query) : ExpenseListQueryParseResult;
+    public sealed record Failure(ListExpensesError Error) : ExpenseListQueryParseResult;
 }
 
-internal static class ExpenseListQueryParser
+public static class ExpenseListQueryParser
 {
     private static readonly Regex DateRangeRegex = new Regex(
         "^(?<start>\\d{2}/\\d{2}/(?:\\d{2}|\\d{4}))\\s*-\\s*(?<end>\\d{2}/\\d{2}/(?:\\d{2}|\\d{4}))(?:\\s+(?<filter>.+))?$",
@@ -82,8 +51,8 @@ internal static class ExpenseListQueryParser
 
         if (DatePrefixRegex.IsMatch(argumentsText))
         {
-            return ExpenseListQueryParseResult.Failure(
-                "Data invalida. Use DD/MM/AA ou DD/MM/AAAA. Exemplo: /listar 10/02/26 - 20/02/2026");
+            return new ExpenseListQueryParseResult.Failure(
+                new ListExpensesError.InvalidDate());
         }
 
         return ParseBillingCycle(argumentsText, messageDateUtc);
@@ -94,28 +63,28 @@ internal static class ExpenseListQueryParser
         if (!TryParseDate(dateRangeMatch.Groups["start"].Value, out DateOnly rangeStart) ||
             !TryParseDate(dateRangeMatch.Groups["end"].Value, out DateOnly rangeEnd))
         {
-            return ExpenseListQueryParseResult.Failure(
-                "Data invalida. Use DD/MM/AA ou DD/MM/AAAA. Exemplo: /listar 10/02/26 - 20/02/2026");
+            return new ExpenseListQueryParseResult.Failure(
+                new ListExpensesError.InvalidDate());
         }
 
         if (rangeStart > rangeEnd)
         {
-            return ExpenseListQueryParseResult.Failure(
-                "Data inicial nao pode ser posterior a data final.");
+            return new ExpenseListQueryParseResult.Failure(
+                new ListExpensesError.InvertedPeriod());
         }
 
         string filterText = dateRangeMatch.Groups["filter"].Value.Trim();
         CategoryFilterParseResult filterResult = ParseCategoryFilter(filterText);
         if (!filterResult.IsSuccess)
         {
-            return ExpenseListQueryParseResult.Failure(filterResult.ErrorMessage!);
+            return new ExpenseListQueryParseResult.Failure(filterResult.Error!);
         }
 
         var (periodStartUtc, periodEndExclusiveUtc) = DateTimeConverter.GetUtcPeriod(rangeStart, rangeEnd);
-        return ExpenseListQueryParseResult.Success(new ExpenseListQuery(
+        return new ExpenseListQueryParseResult.Success(new ExpenseListQuery(
             periodStartUtc,
             periodEndExclusiveUtc,
-            $"{rangeStart:dd/MM/yyyy} a {rangeEnd:dd/MM/yyyy}",
+            new ExpensePeriod(ExpensePeriodKind.DateRange, rangeStart, rangeEnd),
             filterResult.Filter!));
     }
 
@@ -134,8 +103,8 @@ internal static class ExpenseListQueryParser
         {
             if (!TryParseMonthYear(firstToken, out referenceDate))
             {
-                return ExpenseListQueryParseResult.Failure(
-                    "Mes/ano invalido. Use o formato MM/YY, exemplo: 09/26");
+                return new ExpenseListQueryParseResult.Failure(
+                    new ListExpensesError.InvalidMonth());
             }
 
             filterText = firstSpaceIndex < 0
@@ -146,15 +115,15 @@ internal static class ExpenseListQueryParser
         CategoryFilterParseResult filterResult = ParseCategoryFilter(filterText);
         if (!filterResult.IsSuccess)
         {
-            return ExpenseListQueryParseResult.Failure(filterResult.ErrorMessage!);
+            return new ExpenseListQueryParseResult.Failure(filterResult.Error!);
         }
 
         BillingCycle cycle = BillingCycle.GetBillingCycle(referenceDate);
         var (periodStartUtc, periodEndExclusiveUtc) = DateTimeConverter.GetUtcPeriod(cycle);
-        return ExpenseListQueryParseResult.Success(new ExpenseListQuery(
+        return new ExpenseListQueryParseResult.Success(new ExpenseListQuery(
             periodStartUtc,
             periodEndExclusiveUtc,
-            $"{cycle.StartDate:dd/MM} a {cycle.EndDate:dd/MM}",
+            new ExpensePeriod(ExpensePeriodKind.BillingCycle, cycle.StartDate, cycle.EndDate),
             filterResult.Filter!));
     }
 
@@ -183,7 +152,7 @@ internal static class ExpenseListQueryParser
             if (categoriesText.Length == 0)
             {
                 return CategoryFilterParseResult.Failure(
-                    "Informe ao menos uma categoria após 'sem'. Exemplo: /listar sem Mercado");
+                    new ListExpensesError.MissingExcludedCategories());
             }
         }
 
@@ -194,7 +163,7 @@ internal static class ExpenseListQueryParser
             if (!CategoryCatalog.TryParse(categoryText, out Categoria category))
             {
                 return CategoryFilterParseResult.Failure(
-                    CategoryCommandMessages.InvalidCategory(categoryText));
+                    new ListExpensesError.UnknownCategory(categoryText));
             }
 
             categories.Add(category);
@@ -271,7 +240,7 @@ internal static class ExpenseListQueryParser
         return normalizedBuilder.ToString();
     }
 
-    private sealed record CategoryFilterParseResult(CategoryFilter? Filter, string? ErrorMessage)
+    private sealed record CategoryFilterParseResult(CategoryFilter? Filter, ListExpensesError? Error)
     {
         public bool IsSuccess => Filter is not null;
 
@@ -280,9 +249,9 @@ internal static class ExpenseListQueryParser
             return new CategoryFilterParseResult(filter, null);
         }
 
-        public static CategoryFilterParseResult Failure(string errorMessage)
+        public static CategoryFilterParseResult Failure(ListExpensesError error)
         {
-            return new CategoryFilterParseResult(null, errorMessage);
+            return new CategoryFilterParseResult(null, error);
         }
     }
 }

@@ -36,7 +36,9 @@ Exemplos:
 
 Sem período, o comando usa o ciclo correspondente à data da mensagem. `MM/YY` seleciona o ciclo que começa no dia 15 daquele mês e termina no dia 14 do seguinte (por exemplo, `04/26` cobre 15/04/2026 a 14/05/2026). Datas explícitas aceitam ano com dois ou quatro dígitos e incluem os dois dias informados.
 
-O filtro final pode incluir uma ou mais categorias separadas por vírgula ou excluí-las com `sem`. Os resultados mostram ID, categoria, valor, descrição e data, em ordem decrescente de data, seguidos do total. Use o ID para excluir uma compra.
+O filtro final pode incluir uma ou mais categorias separadas por vírgula ou excluí-las com `sem`. A ordem das categorias e as repetições são preservadas no cabeçalho; repetir uma categoria não duplica compras nem o total. Os resultados mostram ID, categoria, valor, descrição e data, em ordem decrescente de data, seguidos do total das compras filtradas. Sem resultados, o bot informa a ausência no período e filtro solicitados. Use o ID para excluir uma compra.
+
+A validação verifica sintaxe do comando, validade das datas, ordem do intervalo e filtro nessa ordem; no formato de ciclo, mês/ano inválido precede o filtro. `sem` exige ao menos uma categoria, e a primeira categoria inválida é informada. O comando aceita maiúsculas e espaços entre comando e argumentos; a menção `/listar@FinanceBot` continua recebendo a orientação de uso. Os cabeçalhos exibem datas inclusivas no calendário de São Paulo, mas a data e hora de cada compra continuam sendo exibidas em UTC, como antes.
 
 ## `/deletar` — remover uma compra
 

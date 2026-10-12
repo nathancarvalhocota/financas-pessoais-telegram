@@ -25,6 +25,90 @@ namespace FinanceBot.IntegrationTests.Api;
 public sealed class TelegramWebhookEndpointTests
 {
     [Theory]
+    [InlineData("/listar", "15/04 a 14/05", "", true)]
+    [InlineData("/listar 04/26", "15/04 a 14/05", "", true)]
+    [InlineData("/listar 04/26 Uber, Mercado, Uber", "15/04 a 14/05", " (Uber, Mercado, Uber)", false)]
+    [InlineData("/listar 04/26 sem Lazer, Lazer", "15/04 a 14/05", " (sem Lazer, Lazer)", false)]
+    [InlineData("/listar 15/04/26 - 14/05/2026", "15/04/2026 a 14/05/2026", "", true)]
+    [InlineData("/listar 15/04/26 - 14/05/2026 Uber, Mercado, Uber", "15/04/2026 a 14/05/2026", " (Uber, Mercado, Uber)", false)]
+    [InlineData("/listar 15/04/26 - 14/05/2026 sem Lazer, Lazer", "15/04/2026 a 14/05/2026", " (sem Lazer, Lazer)", false)]
+    public async Task PostWebhook_List_PreservesBoundariesFiltersOrderTotalsAndVisibleUtc(
+        string command, string period, string suffix, bool showLeisure)
+    {
+        using FinanceBotApiFactory factory = new(998877);
+        using HttpClient client = factory.CreateClient();
+        int firstId, middleId, lastId;
+        using (IServiceScope scope = factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>();
+            Compra Create(double amount, string description, Categoria category, DateTime date) =>
+                Assert.IsType<CompraCreationResult.Success>(Compra.Criar(amount, description, category, date)).Compra;
+            DateTime start = new(2026, 4, 15, 3, 0, 0, DateTimeKind.Utc);
+            DateTime end = new(2026, 5, 15, 3, 0, 0, DateTimeKind.Utc);
+            Compra first = Create(10.25, "Primeiro instante", Categoria.Mercado, start);
+            Compra middle = Create(20, "Cinema", Categoria.Lazer, start.AddDays(5));
+            Compra last = Create(30.5, "Último instante", Categoria.Uber, end.AddTicks(-1));
+            context.Compras.AddRange(first, last, middle,
+                Create(100, "Antes", Categoria.Mercado, start.AddTicks(-1)),
+                Create(200, "Depois", Categoria.Uber, end));
+            await context.SaveChangesAsync();
+            firstId = first.Id;
+            middleId = middle.Id;
+            lastId = last.Id;
+        }
+
+        using HttpResponseMessage response = await client.PostAsJsonAsync("/telegram/webhook", new TelegramWebhookRequest
+        {
+            Message = new TelegramMessageRequest
+            {
+                Chat = new TelegramChatRequest { Id = 998877 }, Text = command,
+                Date = new DateTimeOffset(2026, 4, 15, 3, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds()
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        string newline = Environment.NewLine;
+        string expected = $"Compras de {period}{suffix}:{newline}" +
+            $"{newline}[{lastId}] Uber — R$ 30,50{newline}    Último instante · 15/05 02:59{newline}";
+        if (showLeisure) expected += $"{newline}[{middleId}] Lazer — R$ 20,00{newline}    Cinema · 20/04 03:00{newline}";
+        expected += $"{newline}[{firstId}] Mercado — R$ 10,25{newline}    Primeiro instante · 15/04 03:00{newline}" +
+            $"\nTotal: R$ {(showLeisure ? "60,75" : "40,75")}";
+        Assert.Equal(expected, Assert.Single(factory.RecordingTelegramMessageHandler.SentMessages).Text);
+        using IServiceScope verify = factory.Services.CreateScope();
+        Assert.Equal(5, verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras.Count());
+    }
+
+    [Theory]
+    [InlineData("/listar", "Nenhuma compra encontrada de 15/03 a 14/04.")]
+    [InlineData("/listar Lazer, Lazer", "Nenhuma compra de Lazer, Lazer de 15/03 a 14/04.")]
+    [InlineData("/listar sem Mercado, Mercado", "Nenhuma compra de 15/03 a 14/04 (sem Mercado, Mercado).")]
+    [InlineData("/listar 10/02/26 - 20/02/2026", "Nenhuma compra encontrada de 10/02/2026 a 20/02/2026.")]
+    [InlineData("/listar@FinanceBot 13/26", "Uso correto: /listar <MM/YY>. Exemplo: /listar 09/26")]
+    [InlineData("/listar 31/02/26 - 10/02/2026 sem", "Data invalida. Use DD/MM/AA ou DD/MM/AAAA. Exemplo: /listar 10/02/26 - 20/02/2026")]
+    [InlineData("/listar 20/02/26 - 10/02/2026 sem", "Data inicial nao pode ser posterior a data final.")]
+    [InlineData("/listar 13/26 sem", "Mes/ano invalido. Use o formato MM/YY, exemplo: 09/26")]
+    [InlineData("/listar sem", "Informe ao menos uma categoria após 'sem'. Exemplo: /listar sem Mercado")]
+    [InlineData("/listar Mercado, desconhecida, outra", "Categoria 'desconhecida' inexistente.\n\nCategorias disponiveis:\nEducacao\nLazer\nLanches\nUber\nMercado\nMoto\nCompras\nOutros\nEstetica\nLimpeza\nSaude")]
+    public async Task PostWebhook_ListEmptyOrInvalid_PreservesMessagesAndMessageDate(string command, string expected)
+    {
+        using FinanceBotApiFactory factory = new(998877);
+        using HttpClient client = factory.CreateClient();
+        using HttpResponseMessage response = await client.PostAsJsonAsync("/telegram/webhook", new TelegramWebhookRequest
+        {
+            Message = new TelegramMessageRequest
+            {
+                Chat = new TelegramChatRequest { Id = 998877 }, Text = command,
+                Date = new DateTimeOffset(2026, 4, 15, 2, 59, 59, TimeSpan.Zero).ToUnixTimeSeconds()
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(expected, Assert.Single(factory.RecordingTelegramMessageHandler.SentMessages).Text);
+        using IServiceScope verify = factory.Services.CreateScope();
+        Assert.Empty(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras);
+    }
+
+    [Theory]
     [InlineData(125, "⚠️ ALERTA AMARELO: gasto do ciclo acima do anterior")]
     [InlineData(150, "🚨 ALERTA VERMELHO: gasto do ciclo muito acima do anterior")]
     [InlineData(200, "🚨 ALERTA URGENTE: gasto do ciclo o dobro do anterior")]
