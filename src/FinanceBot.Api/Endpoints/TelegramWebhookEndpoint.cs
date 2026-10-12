@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using FinanceBot.Api.Commands;
+using FinanceBot.Api.Commands.Parsing;
 using FinanceBot.Api.Configuration;
 using FinanceBot.Api.Messaging;
 using Microsoft.Extensions.Options;
@@ -27,67 +29,109 @@ public static class TelegramWebhookEndpoint
         CancellationToken cancellationToken)
     {
         ILogger logger = loggerFactory.CreateLogger("TelegramWebhook");
-
-        if (!request.Headers.TryGetValue("X-Telegram-Bot-Api-Secret-Token", out var secrets)
-            || secrets.Count != 1
-            || !string.Equals(secrets[0], telegramOptions.Value.WebhookSecret, StringComparison.Ordinal))
-        {
-            logger.LogWarning("Telegram webhook authentication failed.");
-            return Results.Unauthorized();
-        }
-
-        if (update?.Message is null)
-        {
-            logger.LogInformation("Ignoring update without message payload.");
-            return Results.Ok();
-        }
-
-        if (string.IsNullOrWhiteSpace(update.Message.Text))
-        {
-            logger.LogInformation("Ignoring message without text content.");
-            return Results.Ok();
-        }
-
-        if (update.Message.Chat is null || update.Message.Chat.Id == 0)
-        {
-            logger.LogWarning("Ignoring message without chat id in payload.");
-            return Results.Ok();
-        }
-
-        long targetChatId = update.Message.Chat.Id;
-        if (!telegramOptions.Value.AllowedChatIds.Contains(targetChatId))
-        {
-            logger.LogWarning("Ignoring message from unauthorized chat {ChatId}.", targetChatId);
-            return Results.Ok();
-        }
-
-        string receivedText = update.Message.Text.Trim();
-        DateTimeOffset messageDateUtc = ResolveMessageDateUtc(update.Message);
-
-        string responseText = await telegramCommandRouter.RouteMessageAsync(
-            receivedText,
-            messageDateUtc,
-            cancellationToken);
+        long started = Stopwatch.GetTimestamp();
+        string outcome = "failed";
+        string stage = "authentication";
+        string? recognizedCommand = null;
+        string? exceptionType = null;
 
         try
         {
-            await telegramMessageSender.SendMessageAsync(
-                targetChatId,
-                responseText,
+            if (!request.Headers.TryGetValue("X-Telegram-Bot-Api-Secret-Token", out var secrets)
+                || secrets.Count != 1
+                || !string.Equals(secrets[0], telegramOptions.Value.WebhookSecret, StringComparison.Ordinal))
+            {
+                outcome = "rejected";
+                return Results.Unauthorized();
+            }
+
+            stage = "validateUpdate";
+            if (update?.Message is null)
+            {
+                outcome = "ignored";
+                return Results.Ok();
+            }
+
+            if (string.IsNullOrWhiteSpace(update.Message.Text))
+            {
+                outcome = "ignored";
+                return Results.Ok();
+            }
+
+            if (update.Message.Chat is null || update.Message.Chat.Id == 0)
+            {
+                outcome = "ignored";
+                return Results.Ok();
+            }
+
+            long targetChatId = update.Message.Chat.Id;
+            if (!telegramOptions.Value.AllowedChatIds.Contains(targetChatId))
+            {
+                outcome = "ignored";
+                return Results.Ok();
+            }
+
+            string receivedText = update.Message.Text.Trim();
+            // Unknown command tokens can contain private payloads; only log the supported names.
+            recognizedCommand = TelegramCommandParser.Parse(receivedText).Name switch
+            {
+                "/compra" => "/compra",
+                "/listar" => "/listar",
+                "/deletar" => "/deletar",
+                "/limite" => "/limite",
+                "/start" => "/start",
+                "/info" => "/info",
+                _ => null
+            };
+            stage = "command";
+            DateTimeOffset messageDateUtc = ResolveMessageDateUtc(update.Message);
+
+            string responseText = await telegramCommandRouter.RouteMessageAsync(
+                receivedText,
+                messageDateUtc,
                 cancellationToken);
+
+            outcome = "processed";
+            stage = "sendMessage";
+            try
+            {
+                await telegramMessageSender.SendMessageAsync(
+                    targetChatId,
+                    responseText,
+                    cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                // Why: webhook endpoint should remain resilient and still acknowledge Telegram updates.
+                logger.LogError(
+                    "Failed to send Telegram reply for chat {ChatId}. Stage: {Stage}; exception type: {ExceptionType}; status: {StatusCode}.",
+                    targetChatId,
+                    "sendMessage",
+                    exception.GetType().Name,
+                    exception is HttpRequestException httpException ? (int?)httpException.StatusCode : null);
+            }
+
+            return Results.Ok();
         }
         catch (Exception exception)
         {
-            // Why: webhook endpoint should remain resilient and still acknowledge Telegram updates.
-            logger.LogError(
-                "Failed to send Telegram reply for chat {ChatId}. Stage: {Stage}; exception type: {ExceptionType}; status: {StatusCode}.",
-                targetChatId,
-                "sendMessage",
-                exception.GetType().Name,
-                exception is HttpRequestException httpException ? (int?)httpException.StatusCode : null);
+            outcome = "failed";
+            exceptionType = exception.GetType().Name;
+            throw;
         }
-
-        return Results.Ok();
+        finally
+        {
+            logger.Log(
+                outcome == "failed" ? LogLevel.Error : outcome == "rejected" ? LogLevel.Warning : LogLevel.Information,
+                new EventId(1001, "TelegramWebhookCompleted"),
+                "Telegram webhook processing completed. Request: {RequestId}; duration ms: {DurationMs}; outcome: {Outcome}; command: {Command}; stage: {Stage}; exception type: {ExceptionType}.",
+                request.HttpContext.TraceIdentifier,
+                Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                outcome,
+                recognizedCommand,
+                stage,
+                exceptionType);
+        }
     }
 
     private static DateTimeOffset ResolveMessageDateUtc(TelegramMessageRequest messageRequest)

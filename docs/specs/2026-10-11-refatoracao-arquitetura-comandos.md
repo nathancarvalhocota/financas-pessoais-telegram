@@ -2,7 +2,7 @@
 
 Data: 2026-10-11.
 
-Status: desenho geral aprovado; tickets #5 (reorganização) e #6 (autenticação, configuração e proteção de credenciais) implementados, validados e publicados pelo usuário no Railway em 2026-10-12, com verificações reais do webhook e Telegram. Tickets #7 (períodos), #8 (`/limite` e proteção de `LimiteCategoria`), #9 (`/compra` e proteção de `Compra`), #10 (`/deletar`) e #11 (`/listar`) implementados localmente; validação registrada ao final. O ticket #12 e a publicação das mudanças de #7 em diante permanecem pendentes.
+Status: desenho geral aprovado; tickets #5 (reorganização) e #6 (autenticação, configuração e proteção de credenciais) implementados, validados e publicados pelo usuário no Railway em 2026-10-12, com verificações reais do webhook e Telegram. Tickets #7 (períodos), #8 (`/limite` e proteção de `LimiteCategoria`), #9 (`/compra` e proteção de `Compra`), #10 (`/deletar`), #11 (`/listar`) e #12 (logs de processamento e startup) implementados e testados localmente; validação registrada ao final. A publicação das mudanças de #7 em diante não foi verificada.
 
 Origem: [issue #4](https://github.com/nathancarvalhocota/financas-pessoais-telegram/issues/4) e decisões da revisão arquitetural. Esta spec substitui as extrações sugeridas na issue pelas alternativas escolhidas durante o debate.
 
@@ -365,30 +365,32 @@ Mensagens de inicialização do PostgreSQL não comprovam cold start: podem acom
 
 ## 9. Verificação e critérios de aceite
 
+Os itens marcados abaixo indicam implementação e verificação local; a publicação das mudanças de #7 em diante permanece não verificada. O histórico de validação real de #5/#6 está preservado na seção 11.
+
 ### 9.1. Estrutura e comandos
 
-- [ ] A solução contém três projetos de produção e os dois projetos de testes atuais; nenhuma referência de projeto depende de Application.
-- [ ] Domain não depende da API, Infrastructure ou frameworks de transporte/persistência; Infrastructure depende de Domain.
-- [ ] Handlers podem ser instanciados e testados sem iniciar servidor HTTP.
-- [ ] Os quatro handlers financeiros retornam resultados estruturados; parsers não retornam mensagens prontas.
-- [ ] Router preserva o `switch`, formata os resultados e mantém `/start`, `/info` e comando desconhecido.
-- [ ] Entrada, mensagens e regras vigentes são preservadas, exceto autenticação/configuração aprovadas e diferenças editoriais explicitamente revisadas.
-- [ ] Compra inválida e limite inválido não podem ser criados/alterados por caminhos públicos; falhas de alteração preservam estado.
-- [ ] Limite igual ao total não é ultrapassado; zero remove; ausência de limite e listagem vazia são estados normais.
-- [ ] Alertas mantêm os limiares, maior cruzamento e ausência de alerta sem base anterior positiva.
-- [ ] Registro reutiliza a consulta atual para limite e alerta; os dados das duas avaliações vêm da mesma leitura.
-- [ ] Consultas incluem o início e excluem o fim; calendário e apresentação mantêm dias inclusivos em São Paulo.
+- [x] A solução contém três projetos de produção e os dois projetos de testes atuais; nenhuma referência de projeto depende de Application.
+- [x] Domain não depende da API, Infrastructure ou frameworks de transporte/persistência; Infrastructure depende de Domain.
+- [x] Handlers podem ser instanciados e testados sem iniciar servidor HTTP.
+- [x] Os quatro handlers financeiros retornam resultados estruturados; parsers não retornam mensagens prontas.
+- [x] Router preserva o `switch`, formata os resultados e mantém `/start`, `/info` e comando desconhecido.
+- [x] Entrada, mensagens e regras vigentes são preservadas, exceto autenticação/configuração aprovadas e diferenças editoriais explicitamente revisadas.
+- [x] Compra inválida e limite inválido não podem ser criados/alterados por caminhos públicos; falhas de alteração preservam estado.
+- [x] Limite igual ao total não é ultrapassado; zero remove; ausência de limite e listagem vazia são estados normais.
+- [x] Alertas mantêm os limiares, maior cruzamento e ausência de alerta sem base anterior positiva.
+- [x] Registro reutiliza a consulta atual para limite e alerta; os dados das duas avaliações vêm da mesma leitura.
+- [x] Consultas incluem o início e excluem o fim; calendário e apresentação mantêm dias inclusivos em São Paulo.
 
 ### 9.2. API e operação
 
-- [ ] Header correto permite o fluxo; header ausente/incorreto retorna HTTP 401 e não persiste nem envia mensagem.
-- [ ] Chat não permitido continua sem operação e envio, com confirmação HTTP vigente.
-- [ ] Startup rejeita opções inválidas com nomes das chaves e sem valores secretos.
-- [ ] Falha no envio após a operação mantém confirmação HTTP 200 e registro seguro; falha inesperada na operação não vira sucesso silencioso.
-- [ ] Logs mostram processamento normal, duração, correlação e etapas de inicialização; logs do HttpClient e falhas não revelam tokens.
-- [ ] Docs incluem configuração local, Railway, ativação inicial, nova configuração, restauração após túnel e diagnóstico.
+- [x] Header correto permite o fluxo; header ausente/incorreto retorna HTTP 401 e não persiste nem envia mensagem.
+- [x] Chat não permitido continua sem operação e envio, com confirmação HTTP vigente.
+- [x] Startup rejeita opções inválidas com nomes das chaves e sem valores secretos.
+- [x] Falha no envio após a operação mantém confirmação HTTP 200 e registro seguro; falha inesperada na operação não vira sucesso silencioso.
+- [x] Logs mostram processamento normal, duração, correlação e etapas de inicialização; logs do HttpClient e falhas não revelam tokens.
+- [x] Docs incluem configuração local, Railway, ativação inicial, nova configuração, restauração após túnel e diagnóstico.
 
-### 9.3. Testes e checks da implementação futura
+### 9.3. Testes e checks da implementação
 
 Distribuir os testes unitários em `Domain` e `Api/Commands` (parsing, handlers, formatting e router); adaptar fixtures/repositórios em memória aos caminhos controlados das entidades. Manter cobertura de infraestrutura e sender onde já existe. Priorizar comportamento e estados de retorno, deixando comparações de texto nos formatters e em cenários selecionados de router/webhook.
 
@@ -439,12 +441,33 @@ O ticket #8 separa `CategoryLimitResult` e seus erros de `CategoryLimitFormatter
 
 O ticket #9 separa o parser puro `ExpenseParser`, `RegisterExpenseResult` e `RegisterExpenseFormatter`, preservando mensagens, precedência das falhas, sintaxe, data UTC e o switch do router. `Compra.Criar` protege valor positivo e finito, descrição preenchida e categoria válida com erros de domínio; construtores e setters são privados, sem nova regra de tamanho de descrição. `ExpenseItem` representa os campos da compra como dados de resposta, disponível para os próximos contratos. O handler persiste antes de consultar limite e períodos, reutiliza uma única leitura do ciclo atual para progresso e alerta e consulta o ciclo anterior separadamente. A política mantém o maior limiar cruzado; o handler prepara percentuais, diferenças e os estados de comparação sem gastos, sem histórico e com base positiva. Exceções inesperadas de persistência e consulta continuam sendo propagadas, com testes cobrindo cada fronteira de repositório. O formatter tem uma comparação exata da mensagem completa de alerta e o webhook cobre os três limiares, limite igual/ultrapassado e erros sem gravação.
 
-Em 2026-10-12, a validação do ticket #9 passou com `dotnet build FinanceBot.sln -m:1` sem avisos/erros e `dotnet test FinanceBot.sln -m:1` com 153 testes unitários e 35 de integração. EF InMemory verifica materialização em contextos distintos, campos/IDs preservados e registros legados sem transformação; metadados Npgsql são inspecionados sem conexão. Não houve execução contra PostgreSQL, nova migration ou mudança de schema. Os tickets #10 a #12 e a publicação das mudanças de #7 em diante permanecem pendentes. Esta etapa não realizou commit, push, merge, alteração/fechamento de issues ou publicação em produção.
+Em 2026-10-12, a validação do ticket #9 passou com `dotnet build FinanceBot.sln -m:1` sem avisos/erros e `dotnet test FinanceBot.sln -m:1` com 153 testes unitários e 35 de integração. EF InMemory verifica materialização em contextos distintos, campos/IDs preservados e registros legados sem transformação; metadados Npgsql são inspecionados sem conexão. Não houve execução contra PostgreSQL, nova migration ou mudança de schema. Ao concluir o ticket #9, os tickets #10 a #12 ainda estavam pendentes. As mudanças de #7 a #11 receberam commits locais na sequência; a publicação de #7 em diante não foi verificada.
 
 O ticket #10 separa `DeleteExpenseResult` e `DeleteExpenseFormatter`, preservando o `switch` e `Task<string>` do router. O handler mantém texto e `CancellationToken`, valida sintaxe e ID antes das consultas e coordena busca/exclusão pelo repositório. Sucesso contém todos os campos da compra removida em `ExpenseItem`; `NotFound` contém o ID solicitado; falhas distinguem `InvalidSyntax` e `InvalidId`. Regex, precedência e mensagens foram preservadas: negativos, sinal positivo, argumentos adicionais e menção ao bot são sintaxe inválida; zero e overflow são ID inválido. Exceções inesperadas e cancelamento de busca/exclusão continuam sendo propagados. Não há framework genérico de resultado, enum global de erros ou interface para formatter.
 
-Em 2026-10-12, `dotnet build FinanceBot.sln -m:1` passou sem avisos/erros e `dotnet test FinanceBot.sln -m:1` passou com 180 testes unitários e 42 de integração. A cobertura de exclusão verifica dados estruturados, ausência de IO para entrada inválida, ID máximo/zeros iniciais, inexistência sem exclusão, exclusão seletiva, ordem das operações, token e exceções em ambas as fronteiras do repositório. O webhook com Telegram simulado confere mensagens exatas, exclusão efetiva, repetição como não encontrado e preservação dos dados de outra compra; integração continua usando EF InMemory, sem executar PostgreSQL ou migrations. `/info` e a lista de `/setcommands` foram conferidos e continuam coerentes, sem alteração dos comandos disponíveis. Não houve mudança de schema nem nova migration. Os tickets #11 e #12 e a publicação das mudanças de #7 em diante permanecem pendentes. Esta etapa não realizou commit, push, merge, alteração/fechamento de issues ou publicação em produção.
+Em 2026-10-12, `dotnet build FinanceBot.sln -m:1` passou sem avisos/erros e `dotnet test FinanceBot.sln -m:1` passou com 180 testes unitários e 42 de integração. A cobertura de exclusão verifica dados estruturados, ausência de IO para entrada inválida, ID máximo/zeros iniciais, inexistência sem exclusão, exclusão seletiva, ordem das operações, token e exceções em ambas as fronteiras do repositório. O webhook com Telegram simulado confere mensagens exatas, exclusão efetiva, repetição como não encontrado e preservação dos dados de outra compra; integração continua usando EF InMemory, sem executar PostgreSQL ou migrations. `/info` e a lista de `/setcommands` foram conferidos e continuam coerentes, sem alteração dos comandos disponíveis. Não houve mudança de schema nem nova migration. Ao concluir o ticket #10, os tickets #11 e #12 ainda estavam pendentes. As mudanças de #7 a #11 receberam commits locais na sequência; a publicação de #7 em diante não foi verificada.
 
 O ticket #11 separa parsing, execução e apresentação de `/listar`. `ExpenseListQueryParser` retorna consulta ou falha tipada específica do comando, sem `ErrorMessage` ou `PeriodDescription`. A consulta contém `ExpensePeriod` com datas inclusivas e tipo `BillingCycle` ou `DateRange`, limites UTC com fim exclusivo e filtro que preserva modo, ordem e categorias duplicadas. O handler coordena uma consulta, aplica inclusão/exclusão, preserva a ordem do repositório e prepara itens em `ExpenseItem` e total em `ListExpensesResult.Success`; lista vazia é sucesso com total zero. `Failure` distingue sintaxe, data, mês, período invertido, exclusão sem categorias e categoria desconhecida. Precedência, formatos de entrada e comportamento de menção ao bot foram preservados. `ExpenseListFormatter` apenas apresenta os dados finais e compartilha a mensagem de categoria inválida; não consulta, filtra ou soma. Os quatro handlers financeiros agora retornam resultados estruturados; o router mantém `switch` e `Task<string>`, e `/start`, `/info` e comando desconhecido permanecem mensagens estáticas.
 
-Em 2026-10-12, `dotnet build FinanceBot.sln -m:1` passou sem avisos/erros e `dotnet test FinanceBot.sln -m:1` passou com 240 testes unitários e 59 de integração, sem falhas ou testes ignorados. Os testes novos cobrem dados/erros do parser e handler, filtros com duplicatas, lista vazia como sucesso, consulta única e token, precedência, falhas inesperadas e cancelamento, calendário histórico e mensagem completa do formatter. Dezessete cenários adicionais de webhook com Telegram simulado verificam intervalos, filtros, totais, ordenação, erros e ciclo pela data da mensagem. A exibição vigente de instantes UTC foi preservada, inclusive quando o dia UTC difere do último dia do calendário de negócio. `/info` e a lista de `/setcommands` foram conferidos, mantendo os mesmos comandos e exemplos. A integração continua usando EF InMemory, sem executar PostgreSQL ou migrations; não houve alteração de schema nem nova migration. O ticket #12 e a publicação das mudanças de #7 em diante permanecem pendentes.
+Em 2026-10-12, `dotnet build FinanceBot.sln -m:1` passou sem avisos/erros e `dotnet test FinanceBot.sln -m:1` passou com 240 testes unitários e 59 de integração, sem falhas ou testes ignorados. Os testes novos cobrem dados/erros do parser e handler, filtros com duplicatas, lista vazia como sucesso, consulta única e token, precedência, falhas inesperadas e cancelamento, calendário histórico e mensagem completa do formatter. Dezessete cenários adicionais de webhook com Telegram simulado verificam intervalos, filtros, totais, ordenação, erros e ciclo pela data da mensagem. A exibição vigente de instantes UTC foi preservada, inclusive quando o dia UTC difere do último dia do calendário de negócio. `/info` e a lista de `/setcommands` foram conferidos, mantendo os mesmos comandos e exemplos. A integração continua usando EF InMemory, sem executar PostgreSQL ou migrations; não houve alteração de schema nem nova migration. Ao concluir o ticket #11, o ticket #12 ainda estava pendente. O ticket #12 foi implementado localmente na etapa seguinte; a publicação das mudanças de #7 em diante não foi verificada.
+
+O ticket #12 completa os logs com `ILogger` e console, sem novas dependências. `TelegramWebhookCompleted` (1001) registra o identificador HTTP existente, duração monotônica, etapa, resultado `ignored`/`rejected`/`processed`/`failed` e apenas um dos seis comandos reconhecidos. Texto, argumentos e tokens desconhecidos ficam fora dos logs; falha de execução registra tipo seguro e é propagada. Falha de envio continua confirmando HTTP 200 após a operação, e `processed` não comprova entrega. O startup valida opções antes de resolver o contexto, registra início/conclusão/falha (1100–1102) e as etapas `resolve`, `inspect` e `migrate`, com duração, tipo de exceção e SQLSTATE PostgreSQL quando disponível, sem mensagem/objeto de exceção ou connection string. `MigrateAsync` continua sendo chamado uma única vez em provedor relacional, sem retry e sem mudança do healthcheck.
+
+Em 2026-10-12, `dotnet build FinanceBot.sln -m:1 --no-restore` passou sem avisos/erros e `dotnet test FinanceBot.sln -m:1 --no-build --no-restore` passou com 240 testes unitários e 77 de integração, sem falhas ou testes ignorados. Os 18 cenários adicionais cobrem os eventos estruturados, correlação com o TraceIdentifier existente, duração, whitelist dos comandos, privacidade em Trace e startup normal/ignorado/com falha. A execução relacional substitui apenas `IMigrator` do EF, sem conexão real, e verifica chamada única, token e propagação de falha com SQLSTATE `57P03`. EF InMemory e Telegram simulado não validam PostgreSQL, migrations reais ou entrega ao Telegram. Não houve mudança de comandos, schema, migrations, tipos monetários ou dependências. Os tickets #7 a #12 estão implementados e testados localmente; publicação de #7 em diante não foi verificada.
+
+## 12. Validação final local — 2026-10-12
+
+Após a revisão dos tickets #7 a #12, os checks gerais passaram:
+
+```powershell
+dotnet build FinanceBot.sln -c Release -m:1 --no-restore
+dotnet test FinanceBot.sln -c Release -m:1 --no-build --no-restore
+dotnet publish src/FinanceBot.Api/FinanceBot.Api.csproj -c Release -m:1 --no-restore -o artifacts/refactor-final-publish
+git diff 1dd2f5c --check
+```
+
+O build Release terminou sem avisos ou erros. Os 317 testes passaram: 240 unitários e 77 de integração, sem falhas ou testes ignorados. O publish serial gerou `artifacts/refactor-final-publish`; entre os projetos da solução, o artefato contém somente `FinanceBot.Api.dll`, `FinanceBot.Domain.dll` e `FinanceBot.Infrastructure.dll`. A verificação do diff não encontrou erros de whitespace.
+
+O publish sem `-m:1` terminou duas vezes com código de saída 1, exibindo zero avisos e zero erros, sem causa diagnosticada. O comando serial acima passou sem alteração de código; esta é uma limitação observada da execução local, sem atribuição de causa.
+
+A integração usa EF InMemory e Telegram simulado; os caminhos relacionais de startup substituem `IMigrator`, sem conexão real. Esses checks não validam PostgreSQL, execução real de migrations ou entrega pelo Telegram. A publicação e o comportamento em runtime dos tickets #7 a #12 não foram verificados; o histórico de validação real de #5/#6 permanece na seção 11.

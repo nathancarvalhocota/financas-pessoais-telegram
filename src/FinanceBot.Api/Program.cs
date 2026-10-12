@@ -4,8 +4,6 @@ using FinanceBot.Api.Configuration;
 using FinanceBot.Api.Endpoints;
 using FinanceBot.Api.Messaging;
 using FinanceBot.Infrastructure.DependencyInjection;
-using FinanceBot.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -27,14 +25,7 @@ WebApplication app = builder.Build();
 // Validate before migrations: ValidateOnStart alone runs later, when the host starts.
 _ = app.Services.GetRequiredService<IOptions<TelegramOptions>>().Value;
 
-using (IServiceScope scope = app.Services.CreateScope())
-{
-    FinanceBotDbContext db = scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>();
-    if (db.Database.IsRelational())
-    {
-        await db.Database.MigrateAsync();
-    }
-}
+await app.Services.InitializeDatabaseAsync(app.Logger);
 
 app.MapGet("/health", static () => Results.Ok("ok"));
 app.MapTelegramWebhookEndpoint();

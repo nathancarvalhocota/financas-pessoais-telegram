@@ -38,6 +38,8 @@ O endpoint de webhook é o adaptador de entrada do Telegram. `TelegramMessageSen
 
 `AddTelegramMessaging` registra e valida as opções e remove os loggers automáticos do HttpClient do Telegram, inclusive em Trace. Os logs de envio preservam etapa, tipo e status sem registrar URI com token, mensagem/objeto de exceção, secret ou corpo bruto. O sender mantém contrato `Task`: resposta HTTP não exitosa é registrada e retorna normalmente; exceção de transporte é registrada com campos seguros e capturada pelo endpoint, que confirma HTTP 200 após o comando concluído. Exceções da execução do comando permanecem fora desse tratamento e não viram sucesso silencioso.
 
+O endpoint emite `TelegramWebhookCompleted` com `HttpContext.TraceIdentifier`, duração medida por relógio monotônico, etapa e resultado `ignored`, `rejected`, `processed` ou `failed`. Credencial inválida é recusada; update sem mensagem/texto/chat válido ou chat não autorizado é ignorado. O campo de comando contém apenas um dos seis nomes reconhecidos pelo router, nunca argumentos ou tokens desconhecidos. `processed` indica execução concluída, inclusive quando o envio falha; não comprova entrega da resposta. Falhas de execução registram somente o tipo de exceção e continuam sendo propagadas.
+
 ## Persistência e inicialização
 
 `FinanceBotDbContext` mapeia `Compra` para `compras` e `LimiteCategoria` para `limite_categorias`. A categoria é armazenada como texto; o valor é persistido como `double precision`. A tabela de limites tem índice único por categoria.
@@ -47,3 +49,5 @@ O endpoint de webhook é o adaptador de entrada do Telegram. `TelegramMessageSen
 Antes de resolver o DbContext ou aplicar migrations, a API valida token não vazio, secret distinto do token com 1 a 256 caracteres ASCII permitidos e lista não vazia de chats. A validação identifica chaves sem seus valores e não chama o Telegram. A configuração usa os provedores padrão, com User Secrets em Development e variáveis de ambiente em produção.
 
 Em bancos relacionais, a API aplica migrations durante a inicialização, antes de começar a atender requisições. Para preparar conexão, secrets e execução local, consulte [`config.md`](config.md).
+
+`InitializeDatabaseAsync` mantém uma única chamada a `MigrateAsync`, sem retry, e registra `DatabaseInitializationStarted`, `DatabaseInitializationCompleted` ou `DatabaseInitializationFailed`. As etapas são `resolve` (resolução do contexto), `inspect` (identificação do provedor) e `migrate`. Provedor não relacional termina com resultado `skipped`; relacional termina com `completed`. Os eventos finais incluem duração monotônica; falha inclui tipo de exceção e SQLSTATE quando a exceção é PostgreSQL, sem registrar objeto/mensagem de exceção ou connection string. A falha impede o startup e é propagada.
