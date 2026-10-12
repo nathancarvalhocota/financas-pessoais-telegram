@@ -45,10 +45,10 @@ public sealed class TelegramCommandRouter
 
         return command.Name switch
         {
-            "/compra" => await _registerExpenseCommandHandler.HandleRegisterExpenseAsync(
+            "/compra" => RegisterExpenseFormatter.Format(await _registerExpenseCommandHandler.HandleRegisterExpenseAsync(
                 command.Text,
                 messageDateUtc,
-                cancellationToken),
+                cancellationToken)),
             "/listar" => await _listExpensesCommandHandler.HandleListExpensesAsync(
                 command.Text,
                 messageDateUtc,

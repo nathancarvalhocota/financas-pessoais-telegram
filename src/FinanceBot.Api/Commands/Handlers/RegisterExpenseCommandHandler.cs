@@ -1,8 +1,5 @@
-using System.Globalization;
-using System.Text;
-using System.Text.RegularExpressions;
-using FinanceBot.Api.Commands;
-using FinanceBot.Api.Commands.Formatting;
+using FinanceBot.Api.Commands.Parsing;
+using FinanceBot.Api.Commands.Results;
 using FinanceBot.Domain.Expenses;
 using FinanceBot.Domain.CategoryLimits;
 using FinanceBot.Domain.Billing;
@@ -12,10 +9,6 @@ namespace FinanceBot.Api.Commands.Handlers;
 
 public sealed class RegisterExpenseCommandHandler
 {
-    private static readonly Regex ExpenseCommandRegex = new Regex(
-        "^/compra(?:@[A-Za-z0-9_]+)?\\s+([0-9]+(?:[.,][0-9]{1,2})?)\\s*,\\s*(.+?)\\s*,\\s*(.+)$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-
     private readonly ICompraRepository _expenseRepository;
     private readonly ILimiteCategoriaRepository _categoryLimitRepository;
 
@@ -27,171 +20,81 @@ public sealed class RegisterExpenseCommandHandler
         _categoryLimitRepository = categoryLimitRepository;
     }
 
-    public async Task<string> HandleRegisterExpenseAsync(
+    public async Task<RegisterExpenseResult> HandleRegisterExpenseAsync(
         string messageText,
         DateTimeOffset messageDateUtc,
         CancellationToken cancellationToken)
     {
-        Match commandMatch = ExpenseCommandRegex.Match(messageText);
-        if (!commandMatch.Success)
+        ExpenseParseResult parsed = ExpenseParser.Parse(messageText);
+        if (parsed is ExpenseParseResult.Failure failure)
         {
-            return "Uso correto: /compra <VALOR>, <DESCRICAO>, <CATEGORIA>. " +
-                "Exemplo: /compra 58,90, Almoco, Mercado";
+            return new RegisterExpenseResult.Failure(failure.Error switch
+            {
+                ExpenseParseError.InvalidSyntax => new RegisterExpenseError.InvalidSyntax(),
+                ExpenseParseError.InvalidAmount => new RegisterExpenseError.InvalidAmount(),
+                ExpenseParseError.MissingDescription => new RegisterExpenseError.MissingDescription(),
+                ExpenseParseError.UnknownCategory unknown => new RegisterExpenseError.UnknownCategory(unknown.Text),
+                _ => throw new InvalidOperationException("Unknown expense parse error.")
+            });
         }
 
-        string valueText = commandMatch.Groups[1].Value;
-        string descriptionText = commandMatch.Groups[2].Value.Trim();
-        string categoryText = commandMatch.Groups[3].Value.Trim();
-
-        bool parsedValue = double.TryParse(
-            valueText.Replace(',', '.'),
-            NumberStyles.AllowDecimalPoint,
-            CultureInfo.InvariantCulture,
-            out double value);
-
-        if (!parsedValue || value <= 0)
+        var input = (ExpenseParseResult.Success)parsed;
+        CompraCreationResult creation = Compra.Criar(input.Amount, input.Description, input.Category, messageDateUtc.UtcDateTime);
+        if (creation is CompraCreationResult.Failure invalid)
         {
-            return "Valor invalido. Use um numero positivo, exemplo: 58,90";
+            return new RegisterExpenseResult.Failure(invalid.Error switch
+            {
+                CompraError.InvalidAmount => new RegisterExpenseError.InvalidAmount(),
+                CompraError.MissingDescription => new RegisterExpenseError.MissingDescription(),
+                CompraError.InvalidCategory => new RegisterExpenseError.UnknownCategory(input.Category.ToString()),
+                _ => throw new InvalidOperationException("Unknown expense domain error.")
+            });
         }
 
-        if (string.IsNullOrWhiteSpace(descriptionText))
-        {
-            return "Descricao obrigatoria no comando /compra.";
-        }
-
-        if (!CategoryCatalog.TryParse(categoryText, out Categoria category))
-        {
-            return CategoryCommandMessages.InvalidCategory(categoryText);
-        }
-
-        DateTime expenseDateUtc = messageDateUtc.UtcDateTime;
-        Compra expense = new Compra
-        {
-            Valor = value,
-            Descricao = descriptionText,
-            Categoria = category,
-            Data = expenseDateUtc
-        };
-
+        Compra expense = ((CompraCreationResult.Success)creation).Compra;
         await _expenseRepository.AddAsync(expense, cancellationToken);
 
-        string categoryDisplayName = CategoryCatalog.GetDisplayName(category);
-        string response = $"Compra registrada: R$ {BrazilianCurrencyFormatter.FormatAmount(value)} - {categoryDisplayName}";
-
-        LimiteCategoria? categoryLimit = await _categoryLimitRepository
-            .GetByCategoryAsync(category, cancellationToken);
-
-        if (categoryLimit is null)
-        {
-            return await AppendPaceAlertAsync(response, expense, cancellationToken);
-        }
-
-        var (periodStartUtc, periodEndExclusiveUtc) = DateTimeConverter.GetUtcPeriod(
-            DateTimeConverter.GetBusinessDate(expenseDateUtc));
-
-        IReadOnlyList<Compra> cycleExpenses = await _expenseRepository.ListByPeriodAsync(
-            periodStartUtc,
-            periodEndExclusiveUtc,
-            cancellationToken);
-
-        double accumulatedSpending = cycleExpenses
-            .Where(item => item.Categoria == category)
-            .Sum(item => item.Valor);
-
-        string formattedSpending = BrazilianCurrencyFormatter.FormatAmount(accumulatedSpending);
-        string formattedLimit = BrazilianCurrencyFormatter.FormatAmount(categoryLimit.Valor);
-
-        CategoryLimitProgress progress = categoryLimit.AvaliarProgresso(accumulatedSpending);
-        if (progress.Excedido)
-        {
-            return await AppendPaceAlertAsync(
-                $"{response}\n⚠ Limite de {categoryDisplayName} ultrapassado: R$ {formattedSpending} de R$ {formattedLimit}",
-                expense,
-                cancellationToken);
-        }
-
-        int percentage = progress.Percentual;
-        return await AppendPaceAlertAsync(
-            $"{response}\n{categoryDisplayName}: R$ {formattedSpending} de R$ {formattedLimit} ({percentage}%)",
-            expense,
-            cancellationToken);
-    }
-
-    private async Task<string> AppendPaceAlertAsync(
-        string response,
-        Compra expense,
-        CancellationToken cancellationToken)
-    {
-        BillingCycle currentCycle = BillingCycle.GetBillingCycle(
-            DateTimeConverter.GetBusinessDate(expense.Data));
+        LimiteCategoria? limit = await _categoryLimitRepository.GetByCategoryAsync(expense.Categoria, cancellationToken);
+        BillingCycle currentCycle = BillingCycle.GetBillingCycle(DateTimeConverter.GetBusinessDate(expense.Data));
         var (currentStartUtc, currentEndExclusiveUtc) = DateTimeConverter.GetUtcPeriod(currentCycle);
+        IReadOnlyList<Compra> currentExpenses = await _expenseRepository.ListByPeriodAsync(
+            currentStartUtc, currentEndExclusiveUtc, cancellationToken);
+
+        CategoryLimitProgress? progress = limit?.AvaliarProgresso(
+            currentExpenses.Where(item => item.Categoria == expense.Categoria).Sum(item => item.Valor));
 
         BillingCycle previousCycle = BillingCycle.GetBillingCycle(currentCycle.StartDate.AddMonths(-1));
         var (previousStartUtc, previousEndExclusiveUtc) = DateTimeConverter.GetUtcPeriod(previousCycle);
-
-        IReadOnlyList<Compra> currentExpenses = await _expenseRepository.ListByPeriodAsync(
-            currentStartUtc,
-            currentEndExclusiveUtc,
-            cancellationToken);
         IReadOnlyList<Compra> previousExpenses = await _expenseRepository.ListByPeriodAsync(
-            previousStartUtc,
-            previousEndExclusiveUtc,
-            cancellationToken);
+            previousStartUtc, previousEndExclusiveUtc, cancellationToken);
 
+        return new RegisterExpenseResult.Success(ExpenseItem.From(expense), progress,
+            PrepareAlert(expense, currentCycle, previousCycle, currentExpenses, previousExpenses));
+    }
+
+    private static SpendingPaceAlert? PrepareAlert(
+        Compra expense, BillingCycle currentCycle, BillingCycle previousCycle,
+        IReadOnlyList<Compra> currentExpenses, IReadOnlyList<Compra> previousExpenses)
+    {
         double currentTotal = currentExpenses.Sum(item => item.Valor);
         double previousTotal = previousExpenses.Sum(item => item.Valor);
-        double totalBeforeExpense = Math.Max(0, currentTotal - expense.Valor);
-        SpendingAlertLevel? alertLevel = SpendingAlertPolicy.GetCrossedLevel(
-            previousTotal,
-            totalBeforeExpense,
-            currentTotal);
+        SpendingAlertLevel? level = SpendingAlertPolicy.GetCrossedLevel(
+            previousTotal, Math.Max(0, currentTotal - expense.Valor), currentTotal);
+        if (level is null)
+            return null;
 
-        if (alertLevel is null)
+        var categories = new List<CategorySpendingComparison>();
+        foreach (Categoria category in CategoryCatalog.GetAll())
         {
-            return response;
+            double current = currentExpenses.Where(item => item.Categoria == category).Sum(item => item.Valor);
+            double previous = previousExpenses.Where(item => item.Categoria == category).Sum(item => item.Valor);
+            SpendingComparison comparison = previous <= 0
+                ? current <= 0 ? new SpendingComparison.NoSpending() : new SpendingComparison.NoHistory()
+                : new SpendingComparison.Comparable((int)Math.Round(current / previous * 100), current - previous);
+            categories.Add(new CategorySpendingComparison(category, current, previous, comparison));
         }
 
-        StringBuilder alert = new StringBuilder();
-        alert.AppendLine(alertLevel switch
-        {
-            SpendingAlertLevel.Urgent => "🚨 ALERTA URGENTE: gasto do ciclo o dobro do anterior",
-            SpendingAlertLevel.Danger => "🚨 ALERTA VERMELHO: gasto do ciclo muito acima do anterior",
-            _ => "⚠️ ALERTA AMARELO: gasto do ciclo acima do anterior"
-        });
-        alert.AppendLine();
-        alert.AppendLine($"Ciclo atual ({currentCycle.StartDate:dd/MM/yyyy} a {currentCycle.EndDate:dd/MM/yyyy}): R$ {BrazilianCurrencyFormatter.FormatAmount(currentTotal)}");
-        alert.AppendLine($"Ciclo anterior ({previousCycle.StartDate:dd/MM/yyyy} a {previousCycle.EndDate:dd/MM/yyyy}): R$ {BrazilianCurrencyFormatter.FormatAmount(previousTotal)}");
-        alert.AppendLine($"Gasto atual: {(int)Math.Round(currentTotal / previousTotal * 100)}% do ciclo anterior ({BrazilianCurrencyFormatter.FormatSignedAmount(currentTotal - previousTotal)}).");
-        alert.AppendLine();
-        alert.AppendLine("Categorias:");
-
-        foreach (Categoria category in Enum.GetValues<Categoria>())
-        {
-            double currentCategoryTotal = currentExpenses
-                .Where(item => item.Categoria == category)
-                .Sum(item => item.Valor);
-            double previousCategoryTotal = previousExpenses
-                .Where(item => item.Categoria == category)
-                .Sum(item => item.Valor);
-
-            alert.Append($"• {CategoryCatalog.GetDisplayName(category)}: R$ {BrazilianCurrencyFormatter.FormatAmount(currentCategoryTotal)} vs R$ {BrazilianCurrencyFormatter.FormatAmount(previousCategoryTotal)} ");
-
-            if (previousCategoryTotal <= 0 && currentCategoryTotal <= 0)
-            {
-                alert.Append("(sem gastos nos dois períodos)");
-            }
-            else if (previousCategoryTotal <= 0)
-            {
-                alert.Append("(sem histórico comparável)");
-            }
-            else
-            {
-                alert.Append($"({(int)Math.Round(currentCategoryTotal / previousCategoryTotal * 100)}%, {BrazilianCurrencyFormatter.FormatSignedAmount(currentCategoryTotal - previousCategoryTotal)})");
-            }
-
-            alert.AppendLine();
-        }
-
-        return $"{response}\n\n{alert.ToString().TrimEnd()}";
+        return new SpendingPaceAlert(level.Value, currentCycle, previousCycle, currentTotal, previousTotal,
+            (int)Math.Round(currentTotal / previousTotal * 100), currentTotal - previousTotal, categories);
     }
 }

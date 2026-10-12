@@ -524,12 +524,12 @@ public sealed class TelegramCommandRouterTests
         DateTime previousStartUtc = new DateTime(2019, 1, 15, 2, 0, 0, DateTimeKind.Utc);
         DateTimeOffset messageDate = new DateTimeOffset(2019, 2, 17, 3, 0, 0, TimeSpan.Zero);
         InMemoryCompraRepository repository = new InMemoryCompraRepository();
-        await repository.AddAsync(new Compra { Valor = 10, Descricao = "Inicio atual", Categoria = Categoria.Mercado, Data = startUtc }, CancellationToken.None);
-        await repository.AddAsync(new Compra { Valor = 20, Descricao = "Fim atual", Categoria = Categoria.Mercado, Data = endExclusiveUtc.AddTicks(-1) }, CancellationToken.None);
-        await repository.AddAsync(new Compra { Valor = 999, Descricao = "Proximo ciclo", Categoria = Categoria.Mercado, Data = endExclusiveUtc }, CancellationToken.None);
-        await repository.AddAsync(new Compra { Valor = 40, Descricao = "Inicio anterior", Categoria = Categoria.Mercado, Data = previousStartUtc }, CancellationToken.None);
-        await repository.AddAsync(new Compra { Valor = 60, Descricao = "Fim anterior", Categoria = Categoria.Mercado, Data = startUtc.AddTicks(-1) }, CancellationToken.None);
-        await repository.AddAsync(new Compra { Valor = 999, Descricao = "Antes do ciclo anterior", Categoria = Categoria.Mercado, Data = previousStartUtc.AddTicks(-1) }, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(10, "Inicio atual", Categoria.Mercado, startUtc)).Compra, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(20, "Fim atual", Categoria.Mercado, endExclusiveUtc.AddTicks(-1))).Compra, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(999, "Proximo ciclo", Categoria.Mercado, endExclusiveUtc)).Compra, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(40, "Inicio anterior", Categoria.Mercado, previousStartUtc)).Compra, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(60, "Fim anterior", Categoria.Mercado, startUtc.AddTicks(-1))).Compra, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(999, "Antes do ciclo anterior", Categoria.Mercado, previousStartUtc.AddTicks(-1))).Compra, CancellationToken.None);
         InMemoryLimiteCategoriaRepository limits = new InMemoryLimiteCategoriaRepository();
         await limits.UpsertAsync(Assert.IsType<LimiteCategoriaCreationResult.Success>(LimiteCategoria.Criar(Categoria.Mercado, 1000)).Limite, CancellationToken.None);
         TelegramCommandRouter router = new TelegramCommandRouter(repository, limits);
@@ -541,7 +541,7 @@ public sealed class TelegramCommandRouterTests
         Assert.Contains("Ciclo atual (15/02/2019 a 14/03/2019): R$ 130,00", response);
         Assert.Contains("Ciclo anterior (15/01/2019 a 14/02/2019): R$ 100,00", response);
         Assert.Contains("Gasto atual: 130% do ciclo anterior (+R$ 30,00).", response);
-        Assert.Equal(new[] { (startUtc, endExclusiveUtc), (startUtc, endExclusiveUtc), (previousStartUtc, startUtc) }, repository.QueriedPeriods);
+        Assert.Equal(new[] { (startUtc, endExclusiveUtc), (previousStartUtc, startUtc) }, repository.QueriedPeriods);
         Compra saved = Assert.Single(repository.Compras, compra => compra.Descricao == "Nova compra");
         Assert.Equal(messageDate.UtcDateTime, saved.Data);
     }
@@ -556,7 +556,7 @@ public sealed class TelegramCommandRouterTests
         DateTime endExclusiveUtc = DateTimeOffset.Parse(endExclusiveText).UtcDateTime;
         InMemoryCompraRepository repository = new InMemoryCompraRepository();
         await SeedPeriodBoundariesAsync(repository, startUtc, endExclusiveUtc);
-        await repository.AddAsync(new Compra { Valor = 500, Descricao = "Outra categoria", Categoria = Categoria.Uber, Data = startUtc }, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(500, "Outra categoria", Categoria.Uber, startUtc)).Compra, CancellationToken.None);
         InMemoryLimiteCategoriaRepository limits = new InMemoryLimiteCategoriaRepository();
         await limits.UpsertAsync(Assert.IsType<LimiteCategoriaCreationResult.Success>(LimiteCategoria.Criar(Categoria.Mercado, 100)).Limite, CancellationToken.None);
         TelegramCommandRouter router = new TelegramCommandRouter(
@@ -573,10 +573,10 @@ public sealed class TelegramCommandRouterTests
 
     private static async Task SeedPeriodBoundariesAsync(InMemoryCompraRepository repository, DateTime startUtc, DateTime endExclusiveUtc)
     {
-        await repository.AddAsync(new Compra { Valor = 999, Descricao = "Antes do inicio", Categoria = Categoria.Mercado, Data = startUtc.AddTicks(-1) }, CancellationToken.None);
-        await repository.AddAsync(new Compra { Valor = 10, Descricao = "Inicio incluido", Categoria = Categoria.Mercado, Data = startUtc }, CancellationToken.None);
-        await repository.AddAsync(new Compra { Valor = 20, Descricao = "Ultimo instante", Categoria = Categoria.Mercado, Data = endExclusiveUtc.AddTicks(-1) }, CancellationToken.None);
-        await repository.AddAsync(new Compra { Valor = 999, Descricao = "Fim excluido", Categoria = Categoria.Mercado, Data = endExclusiveUtc }, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(999, "Antes do inicio", Categoria.Mercado, startUtc.AddTicks(-1))).Compra, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(10, "Inicio incluido", Categoria.Mercado, startUtc)).Compra, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(20, "Ultimo instante", Categoria.Mercado, endExclusiveUtc.AddTicks(-1))).Compra, CancellationToken.None);
+        await repository.AddAsync(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(999, "Fim excluido", Categoria.Mercado, endExclusiveUtc)).Compra, CancellationToken.None);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
@@ -594,7 +594,7 @@ public sealed class TelegramCommandRouterTests
         {
             if (compra.Id == 0)
             {
-                compra.Id = _nextId++;
+                typeof(Compra).GetProperty(nameof(Compra.Id))!.SetValue(compra, _nextId++);
             }
 
             Compras.Add(compra);

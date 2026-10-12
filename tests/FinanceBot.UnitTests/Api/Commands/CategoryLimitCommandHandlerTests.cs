@@ -154,7 +154,7 @@ public sealed class CategoryLimitCommandHandlerTests
         Assert.IsType<LimiteCategoriaCreationResult.Success>(LimiteCategoria.Criar(Categoria.Mercado, value)).Limite;
 
     private static Compra Expense(Categoria category, double value, DateTime date) =>
-        new() { Categoria = category, Valor = value, Descricao = "Compra", Data = date };
+        Assert.IsType<CompraCreationResult.Success>(Compra.Criar(value, "Compra", category, date)).Compra;
 
     private sealed class FixedTimeProvider : TimeProvider
     {

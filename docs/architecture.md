@@ -20,9 +20,11 @@ A API referencia Domain e Infrastructure. Infrastructure referencia apenas Domai
 
 `/start` e `/info` respondem sem consultar o banco. A lista de comandos e seus formatos fica em [`commands.md`](commands.md).
 
-O router mantém um `switch` para selecionar os quatro handlers financeiros e as respostas estáticas, com saída `Task<string>`. Os handlers recebem texto e contratos de repositório e podem ser instanciados sem servidor HTTP, `HttpContext`, sender ou `DbContext`. O handler de `/limite` retorna `CategoryLimitResult`, com variantes `Queried`, `Updated`, `Removed` e `Failure` e erros específicos; o router chama `CategoryLimitFormatter` para apresentar o resultado. Consulta sem limite é um resultado normal com progresso ausente. Os outros três handlers ainda retornam mensagens.
+O router mantém um `switch` para selecionar os quatro handlers financeiros e as respostas estáticas, com saída `Task<string>`. Os handlers recebem texto e contratos de repositório e podem ser instanciados sem servidor HTTP, `HttpContext`, sender ou `DbContext`. O handler de `/limite` retorna `CategoryLimitResult`, com variantes `Queried`, `Updated`, `Removed` e `Failure` e erros específicos; o router chama `CategoryLimitFormatter` para apresentar o resultado. Consulta sem limite é um resultado normal com progresso ausente. O handler de `/compra` retorna `RegisterExpenseResult`, apresentado por `RegisterExpenseFormatter`. `/listar` e `/deletar` ainda retornam mensagens.
 
 `CategoryLimitCommandHandler` coordena consulta, remoção e upsert e traduz erros de criação do domínio para erros de comando. O formatter só apresenta dados e erros, sem acessar repositórios ou calcular regras financeiras. `LimiteCategoria.AvaliarProgresso` recebe o total já consultado pelo handler e devolve os dados do progresso.
+
+`RegisterExpenseCommandHandler` chama o parser puro `ExpenseParser`, traduz falhas tipadas de parsing e criação de `Compra` para erros específicos e persiste antes de consultar limite e gastos. Uma única leitura do ciclo atual alimenta progresso e alerta; o ciclo anterior completo tem uma consulta separada. O sucesso contém `ExpenseItem`, progresso opcional e `SpendingPaceAlert` opcional. O handler prepara percentuais, diferenças e os estados de comparação por categoria (`NoSpending`, `NoHistory` e `Comparable`); o formatter apresenta esses dados, mantendo confirmação, limite e alerta nessa ordem. Exceções inesperadas de persistência ou consulta continuam sendo propagadas.
 
 ## Composição e integrações
 
@@ -36,7 +38,7 @@ O endpoint de webhook é o adaptador de entrada do Telegram. `TelegramMessageSen
 
 `FinanceBotDbContext` mapeia `Compra` para `compras` e `LimiteCategoria` para `limite_categorias`. A categoria é armazenada como texto; o valor é persistido como `double precision`. A tabela de limites tem índice único por categoria.
 
-`LimiteCategoria` tem construtores e setters privados; o EF materializa as propriedades encapsuladas sem transformar registros existentes. O upsert usa `AlterarValor` ao atualizar um limite existente, preserva seu ID e continua chamando `SaveChanges` no repositório. A refatoração não altera o mapeamento nem adiciona migration.
+`Compra` e `LimiteCategoria` têm construtores e setters privados; o EF materializa as propriedades encapsuladas sem transformar registros existentes. A criação de compra usa `Compra.Criar`; não há alterações públicas de seus campos. O upsert de limite usa `AlterarValor` ao atualizar um limite existente, preserva seu ID e continua chamando `SaveChanges` no repositório. A refatoração não altera o mapeamento nem adiciona migration.
 
 Antes de resolver o DbContext ou aplicar migrations, a API valida token não vazio, secret distinto do token com 1 a 256 caracteres ASCII permitidos e lista não vazia de chats. A validação identifica chaves sem seus valores e não chama o Telegram. A configuração usa os provedores padrão, com User Secrets em Development e variáveis de ambiente em produção.
 

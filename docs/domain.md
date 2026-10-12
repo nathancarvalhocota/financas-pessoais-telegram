@@ -6,6 +6,8 @@ Este documento reúne as regras financeiras compartilhadas pelos comandos. Forma
 
 Uma compra (`Compra`) registra valor, descrição, categoria e data. A API usa `message.date` como instante da compra; quando a data não vem no update, usa a hora UTC atual. O instante é persistido em UTC.
 
+`Compra.Criar` exige valor positivo e finito, descrição preenchida e categoria definida no enum. Falhas retornam `CompraError`, sem mensagens. Construtores e setters são privados; não há alteração pública que contorne essas regras. O parsing apara a descrição; a entidade não acrescenta regra de tamanho máximo. O limite de 255 caracteres já existente no mapeamento EF permanece. A materialização de registros legados preserva campos e IDs, inclusive dados que não passariam pela criação atual, sem limpeza ou nova migration.
+
 As categorias válidas são `Educacao`, `Lazer`, `Lanches`, `Uber`, `Mercado`, `Moto`, `Compras`, `Outros`, `Estetica`, `Limpeza` e `Saude`. O código normaliza o texto de entrada removendo acentos, espaços, pontuação e diferenças entre maiúsculas e minúsculas. Essa normalização não cria sinônimos para as categorias.
 
 ## Ciclo de faturamento e datas
@@ -33,3 +35,5 @@ O limite é ultrapassado quando o total gasto é maior que o limite. Atingir exa
 Após registrar uma compra, o código compara o total do ciclo atual com o total do ciclo anterior completo. Ele considera os limiares de 125%, 150% e 200%, e emite o nível mais alto cruzado por aquela compra. Sem gasto positivo no ciclo anterior, não há base para alerta.
 
 Os alertas são calculados a partir dos totais antes e depois da compra. O sistema não persiste um estado de alertas já enviados.
+
+O handler reutiliza a mesma leitura do ciclo atual para progresso de limite e alerta e consulta o ciclo anterior separadamente. A comparação de cada categoria distingue ausência de gastos nos dois períodos, gasto atual sem histórico comparável e comparação com base anterior positiva. Somente a última calcula percentual e diferença; categorias sem base não causam divisão por zero. O percentual apresentado é o gasto atual como porcentagem do anterior, mantendo `Math.Round`.

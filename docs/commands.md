@@ -14,7 +14,7 @@ Exemplo:
 /compra 58,90, Almoço da semana, Mercado
 ```
 
-Valor, descrição e categoria são obrigatórios. Use valor positivo com até duas casas decimais; `,` e `.` podem separar os centavos. A categoria deve corresponder a uma das categorias válidas acima. A API usa a data da mensagem recebida pelo Telegram.
+Valor, descrição e categoria são obrigatórios. Use valor positivo e finito com até duas casas decimais; `,` e `.` podem separar os centavos. A categoria deve corresponder a uma das categorias válidas acima. A API usa a data da mensagem recebida pelo Telegram. A validação verifica sintaxe, valor, descrição e categoria nessa ordem. A descrição é aparada, e vírgulas adicionais continuam sendo interpretadas como parte da categoria.
 
 Se houver limite configurado para a categoria, a resposta informa o total do ciclo e o progresso do limite. A resposta também inclui um alerta de ritmo quando o total do ciclo atual cruza um dos limiares comparados ao ciclo anterior completo.
 

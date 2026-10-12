@@ -6,6 +6,7 @@ using FinanceBot.Api.Endpoints;
 using FinanceBot.Api.Configuration;
 using FinanceBot.Api.Messaging;
 using FinanceBot.Domain.Categories;
+using FinanceBot.Domain.CategoryLimits;
 using FinanceBot.Domain.Expenses;
 using FinanceBot.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -23,6 +24,66 @@ namespace FinanceBot.IntegrationTests.Api;
 
 public sealed class TelegramWebhookEndpointTests
 {
+    [Theory]
+    [InlineData(125, "⚠️ ALERTA AMARELO: gasto do ciclo acima do anterior")]
+    [InlineData(150, "🚨 ALERTA VERMELHO: gasto do ciclo muito acima do anterior")]
+    [InlineData(200, "🚨 ALERTA URGENTE: gasto do ciclo o dobro do anterior")]
+    public async Task PostWebhook_PurchaseWithLimitAndCrossedThreshold_PersistsAndPresentsHighestAlert(int amount, string heading)
+    {
+        using FinanceBotApiFactory factory = new(998877);
+        using HttpClient client = factory.CreateClient();
+        using (IServiceScope scope = factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>();
+            context.Compras.Add(Assert.IsType<CompraCreationResult.Success>(Compra.Criar(
+                100, "Base anterior", Categoria.Mercado, new DateTime(2026, 4, 14, 12, 0, 0, DateTimeKind.Utc))).Compra);
+            context.LimiteCategorias.Add(Assert.IsType<LimiteCategoriaCreationResult.Success>(LimiteCategoria.Criar(Categoria.Mercado, 100)).Limite);
+            await context.SaveChangesAsync();
+        }
+
+        using HttpResponseMessage response = await client.PostAsJsonAsync("/telegram/webhook", new TelegramWebhookRequest
+        {
+            Message = new TelegramMessageRequest
+            {
+                Chat = new TelegramChatRequest { Id = 998877 },
+                Text = $"/compra {amount}, Compra atual, Mercado",
+                Date = new DateTimeOffset(2026, 4, 20, 12, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds()
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        string reply = Assert.Single(factory.RecordingTelegramMessageHandler.SentMessages).Text;
+        Assert.StartsWith($"Compra registrada: R$ {amount},00 - Mercado\n⚠ Limite de Mercado ultrapassado: R$ {amount},00 de R$ 100,00\n\n{heading}", reply);
+        Assert.Contains($"Ciclo atual (15/04/2026 a 14/05/2026): R$ {amount},00", reply);
+        Assert.Contains("Ciclo anterior (15/03/2026 a 14/04/2026): R$ 100,00", reply);
+        Assert.Contains($"Gasto atual: {amount}% do ciclo anterior (+R$ {amount - 100},00).", reply);
+        Assert.Contains("• Educacao: R$ 0,00 vs R$ 0,00 (sem gastos nos dois períodos)", reply);
+        using IServiceScope verify = factory.Services.CreateScope();
+        var saved = Assert.Single(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras, item => item.Descricao == "Compra atual");
+        Assert.Equal(amount, saved.Valor);
+        Assert.Equal(new DateTime(2026, 4, 20, 12, 0, 0, DateTimeKind.Utc), saved.Data);
+        Assert.True(saved.Id > 0);
+    }
+
+    [Theory]
+    [InlineData("/compra -1, Teste, Inexistente", "Uso correto: /compra <VALOR>, <DESCRICAO>, <CATEGORIA>. Exemplo: /compra 58,90, Almoco, Mercado")]
+    [InlineData("/compra 0,   , Inexistente", "Valor invalido. Use um numero positivo, exemplo: 58,90")]
+    [InlineData("/compra 1,   , Inexistente", "Descricao obrigatoria no comando /compra.")]
+    public async Task PostWebhook_InvalidPurchase_PreservesErrorPrecedenceAndDoesNotPersist(string text, string expected)
+    {
+        using FinanceBotApiFactory factory = new(998877);
+        using HttpClient client = factory.CreateClient();
+        using HttpResponseMessage response = await client.PostAsJsonAsync("/telegram/webhook", new TelegramWebhookRequest
+        {
+            Message = new TelegramMessageRequest { Chat = new TelegramChatRequest { Id = 998877 }, Text = text }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(expected, Assert.Single(factory.RecordingTelegramMessageHandler.SentMessages).Text);
+        using IServiceScope verify = factory.Services.CreateScope();
+        Assert.Empty(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras);
+    }
+
     [Fact]
     public async Task PostWebhook_CategoryLimitLifecycle_PreservesMessagesPersistenceAndIdentity()
     {
@@ -267,8 +328,7 @@ public sealed class TelegramWebhookEndpointTests
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
         SentTelegramMessage sentTelegramMessage = Assert.Single(
             financeBotApiFactory.RecordingTelegramMessageHandler.SentMessages);
-        Assert.Contains("Compra registrada: R$ 58,90", sentTelegramMessage.Text);
-        Assert.Contains("Mercado", sentTelegramMessage.Text);
+        Assert.Equal("Compra registrada: R$ 58,90 - Mercado", sentTelegramMessage.Text);
 
         using IServiceScope serviceScope = financeBotApiFactory.Services.CreateScope();
         FinanceBotDbContext financeBotDbContext = serviceScope.ServiceProvider.GetRequiredService<
@@ -327,20 +387,8 @@ public sealed class TelegramWebhookEndpointTests
         {
             FinanceBotDbContext financeBotDbContext = serviceScope.ServiceProvider.GetRequiredService<
                 FinanceBotDbContext>();
-            Compra compra1 = new Compra
-            {
-                Valor = 58.90,
-                Descricao = "Almoco",
-                Categoria = Categoria.Mercado,
-                Data = januaryDate
-            };
-            Compra compra2 = new Compra
-            {
-                Valor = 20.00,
-                Descricao = "Lanche",
-                Categoria = Categoria.Lanches,
-                Data = januaryDate.AddDays(1)
-            };
+            Compra compra1 = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(58.90, "Almoco", Categoria.Mercado, januaryDate)).Compra;
+            Compra compra2 = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(20.00, "Lanche", Categoria.Lanches, januaryDate.AddDays(1))).Compra;
             financeBotDbContext.Compras.AddRange(compra1, compra2);
             financeBotDbContext.SaveChanges();
         }
@@ -381,13 +429,7 @@ public sealed class TelegramWebhookEndpointTests
         {
             FinanceBotDbContext financeBotDbContext = serviceScope.ServiceProvider.GetRequiredService<
                 FinanceBotDbContext>();
-            Compra compra = new Compra
-            {
-                Valor = 33.50,
-                Descricao = "Uber para trabalho",
-                Categoria = Categoria.Uber,
-                Data = DateTime.UtcNow
-            };
+            Compra compra = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(33.50, "Uber para trabalho", Categoria.Uber, DateTime.UtcNow)).Compra;
             financeBotDbContext.Compras.Add(compra);
             financeBotDbContext.SaveChanges();
             compraId = compra.Id;
