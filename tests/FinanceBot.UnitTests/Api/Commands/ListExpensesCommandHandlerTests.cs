@@ -1,3 +1,4 @@
+using System.Globalization;
 using FinanceBot.Api.Commands.Handlers;
 using FinanceBot.Api.Commands.Results;
 using FinanceBot.Domain.Categories;
@@ -8,7 +9,7 @@ namespace FinanceBot.UnitTests.Api.Commands;
 
 public sealed class ListExpensesCommandHandlerTests
 {
-    private static readonly DateTimeOffset MessageDate = DateTimeOffset.Parse("2026-04-15T03:00:00Z");
+    private static readonly DateTimeOffset MessageDate = DateTimeOffset.Parse("2026-04-15T03:00:00Z", CultureInfo.InvariantCulture);
 
     [Theory]
     [InlineData("", CategoryFilterMode.None, 65, new[] { 4, 3, 2, 1 })]
@@ -32,9 +33,9 @@ public sealed class ListExpensesCommandHandlerTests
         Assert.Equal(mode, result.Filter.Mode);
         Assert.Equal(total, result.Total);
         Assert.Equal(expectedIds, result.Items.Select(item => item.Id));
-        Assert.Equal(new ExpenseItem(4, 25, "Compra 4", Category.Uber, DateTime.Parse("2026-05-15T02:59:59Z").ToUniversalTime()), result.Items[0]);
-        Assert.Equal((DateTimeOffset.Parse("2026-04-15T03:00:00Z").UtcDateTime,
-            DateTimeOffset.Parse("2026-05-15T03:00:00Z").UtcDateTime, cancellation.Token), Assert.Single(repository.Queries));
+        Assert.Equal(new ExpenseItem(4, 25, "Compra 4", Category.Uber, DateTime.Parse("2026-05-15T02:59:59Z", CultureInfo.InvariantCulture).ToUniversalTime()), result.Items[0]);
+        Assert.Equal((DateTimeOffset.Parse("2026-04-15T03:00:00Z", CultureInfo.InvariantCulture).UtcDateTime,
+            DateTimeOffset.Parse("2026-05-15T03:00:00Z", CultureInfo.InvariantCulture).UtcDateTime, cancellation.Token), Assert.Single(repository.Queries));
         Assert.Equal(4, repository.Items.Count);
     }
 
@@ -46,8 +47,8 @@ public sealed class ListExpensesCommandHandlerTests
         string text, string messageDate, string start, string end)
     {
         var repository = new ExpenseRepository();
-        DateTime startUtc = DateTimeOffset.Parse(start).UtcDateTime;
-        DateTime endUtc = DateTimeOffset.Parse(end).UtcDateTime;
+        DateTime startUtc = DateTimeOffset.Parse(start, CultureInfo.InvariantCulture).UtcDateTime;
+        DateTime endUtc = DateTimeOffset.Parse(end, CultureInfo.InvariantCulture).UtcDateTime;
         repository.Items.AddRange([
             CreateExpense(4, 40, Category.Mercado, endUtc),
             CreateExpense(3, 30, Category.Mercado, endUtc.AddTicks(-1)),
@@ -55,7 +56,7 @@ public sealed class ListExpensesCommandHandlerTests
             CreateExpense(1, 10, Category.Mercado, startUtc.AddTicks(-1))]);
 
         var result = Assert.IsType<ListExpensesResult.Success>(await new ListExpensesCommandHandler(repository)
-            .HandleListExpensesAsync(text, DateTimeOffset.Parse(messageDate), CancellationToken.None));
+            .HandleListExpensesAsync(text, DateTimeOffset.Parse(messageDate, CultureInfo.InvariantCulture), CancellationToken.None));
 
         Assert.Equal((startUtc, endUtc, CancellationToken.None), Assert.Single(repository.Queries));
         Assert.Equal(new[] { 3, 2 }, result.Items.Select(item => item.Id));
@@ -118,7 +119,7 @@ public sealed class ListExpensesCommandHandlerTests
     }
 
     private static Expense CreateExpense(int id, double amount, Category category, string date) =>
-        CreateExpense(id, amount, category, DateTimeOffset.Parse(date).UtcDateTime);
+        CreateExpense(id, amount, category, DateTimeOffset.Parse(date, CultureInfo.InvariantCulture).UtcDateTime);
 
     private static Expense CreateExpense(int id, double amount, Category category, DateTime date)
     {
@@ -133,15 +134,15 @@ public sealed class ListExpensesCommandHandlerTests
         public List<(DateTime Start, DateTime EndExclusive, CancellationToken Token)> Queries { get; } = new();
         public Exception? Exception { get; init; }
 
-        public Task<IReadOnlyList<Expense>> ListByPeriodAsync(DateTime startUtc, DateTime endExclusiveUtc, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<Expense>> ListByPeriodAsync(DateTime periodStartUtc, DateTime periodEndExclusiveUtc, CancellationToken cancellationToken)
         {
-            Queries.Add((startUtc, endExclusiveUtc, cancellationToken));
+            Queries.Add((periodStartUtc, periodEndExclusiveUtc, cancellationToken));
             if (Exception is not null) throw Exception;
-            return Task.FromResult<IReadOnlyList<Expense>>(Items.Where(item => item.DateUtc >= startUtc && item.DateUtc < endExclusiveUtc).ToList());
+            return Task.FromResult<IReadOnlyList<Expense>>(Items.Where(item => item.DateUtc >= periodStartUtc && item.DateUtc < periodEndExclusiveUtc).ToList());
         }
 
         public Task AddAsync(Expense expense, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Expense?> FindByIdAsync(int id, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Expense?> FindByIdAsync(int expenseId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task DeleteAsync(Expense expense, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

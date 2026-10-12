@@ -16,6 +16,21 @@ public sealed class RegisterExpenseCommandHandlerTests
     private static readonly DateTime PreviousStart = new(2026, 3, 15, 3, 0, 0, DateTimeKind.Utc);
 
     [Fact]
+    public async Task Handle_ExcessiveBacktracking_ReturnsSyntaxErrorWithoutAccessingRepositories()
+    {
+        var repository = new Repositories();
+        var handler = new RegisterExpenseCommandHandler(repository, repository);
+        string text = "/compra 1, " + new string(' ', 100_000) + "\n";
+
+        var result = Assert.IsType<RegisterExpenseResult.Failure>(await handler.HandleRegisterExpenseAsync(
+            text, MessageDate, CancellationToken.None));
+
+        Assert.IsType<RegisterExpenseError.InvalidSyntax>(result.Error);
+        Assert.Empty(repository.Operations);
+        Assert.Empty(repository.Items);
+    }
+
+    [Fact]
     public async Task Handle_WithoutLimitOrHistory_ReturnsPersistedExpenseDataInUtc()
     {
         var repository = new Repositories();
@@ -36,7 +51,7 @@ public sealed class RegisterExpenseCommandHandlerTests
     public async Task Handle_WithLimitAndAlert_PersistsFirstAndSharesOneCurrentCycleRead()
     {
         using var cancellation = new CancellationTokenSource();
-        var repository = new Repositories { Limit = Limit(100) };
+        var repository = new Repositories { Limit = CreateLimit(100) };
         repository.Items.Add(CreateExpense(100, Category.Mercado, PreviousStart));
         repository.Items.Add(CreateExpense(20, Category.Uber, CurrentStart));
         var handler = new RegisterExpenseCommandHandler(repository, repository);
@@ -65,7 +80,7 @@ public sealed class RegisterExpenseCommandHandlerTests
     [InlineData(100.01, true)]
     public async Task Handle_LimitEqualityAndExceeding_ReturnDomainProgress(double amount, bool exceeded)
     {
-        var repository = new Repositories { Limit = Limit(100) };
+        var repository = new Repositories { Limit = CreateLimit(100) };
 
         var result = Assert.IsType<RegisterExpenseResult.Success>(await new RegisterExpenseCommandHandler(repository, repository)
             .HandleRegisterExpenseAsync($"/compra {amount.ToString(System.Globalization.CultureInfo.InvariantCulture)}, Teste, Mercado", MessageDate, CancellationToken.None));
@@ -124,13 +139,13 @@ public sealed class RegisterExpenseCommandHandlerTests
 
         Assert.Same(repository.Exception, exception);
         Assert.Equal(persisted ? 1 : 0, repository.Items.Count);
-        Assert.Equal(stage, repository.Operations.Last());
+        Assert.Equal(stage, repository.Operations[^1]);
     }
 
     private static Expense CreateExpense(double amount, Category category, DateTime date) =>
         Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(amount, "Base", category, date)).Expense;
 
-    private static CategoryLimit Limit(double amount) =>
+    private static CategoryLimit CreateLimit(double amount) =>
         Assert.IsType<CategoryLimitCreationResult.Success>(CategoryLimit.Create(Category.Mercado, amount)).Limit;
 
     private sealed class Repositories : IExpenseRepository, ICategoryLimitRepository
@@ -164,16 +179,16 @@ public sealed class RegisterExpenseCommandHandlerTests
             return Task.FromResult(Limit?.Category == category ? Limit : null);
         }
 
-        public Task<IReadOnlyList<Expense>> ListByPeriodAsync(DateTime startUtc, DateTime endExclusiveUtc, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<Expense>> ListByPeriodAsync(DateTime periodStartUtc, DateTime periodEndExclusiveUtc, CancellationToken cancellationToken)
         {
-            Record(startUtc == CurrentStart ? "current" : "previous", cancellationToken);
-            Periods.Add((startUtc, endExclusiveUtc));
-            return Task.FromResult<IReadOnlyList<Expense>>(Items.Where(item => item.DateUtc >= startUtc && item.DateUtc < endExclusiveUtc).ToList());
+            Record(periodStartUtc == CurrentStart ? "current" : "previous", cancellationToken);
+            Periods.Add((periodStartUtc, periodEndExclusiveUtc));
+            return Task.FromResult<IReadOnlyList<Expense>>(Items.Where(item => item.DateUtc >= periodStartUtc && item.DateUtc < periodEndExclusiveUtc).ToList());
         }
 
-        public Task<Expense?> FindByIdAsync(int id, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Expense?> FindByIdAsync(int expenseId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task DeleteAsync(Expense expense, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task UpsertAsync(CategoryLimit limit, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task DeleteAsync(CategoryLimit limit, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task UpsertAsync(CategoryLimit categoryLimit, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task DeleteAsync(CategoryLimit categoryLimit, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

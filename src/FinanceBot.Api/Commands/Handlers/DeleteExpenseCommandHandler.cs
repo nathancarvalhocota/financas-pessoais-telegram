@@ -8,7 +8,8 @@ public sealed class DeleteExpenseCommandHandler
 {
     private static readonly Regex DeleteExpenseCommandRegex = new Regex(
         "^/deletar\\s+(\\d+)\\s*$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        TimeSpan.FromSeconds(1));
 
     private readonly IExpenseRepository _expenseRepository;
 
@@ -19,7 +20,15 @@ public sealed class DeleteExpenseCommandHandler
 
     public async Task<DeleteExpenseResult> HandleDeleteExpenseAsync(string messageText, CancellationToken cancellationToken)
     {
-        Match commandMatch = DeleteExpenseCommandRegex.Match(messageText);
+        Match commandMatch;
+        try
+        {
+            commandMatch = DeleteExpenseCommandRegex.Match(messageText);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return new DeleteExpenseResult.Failure(new DeleteExpenseError.InvalidSyntax());
+        }
         if (!commandMatch.Success)
         {
             return new DeleteExpenseResult.Failure(new DeleteExpenseError.InvalidSyntax());

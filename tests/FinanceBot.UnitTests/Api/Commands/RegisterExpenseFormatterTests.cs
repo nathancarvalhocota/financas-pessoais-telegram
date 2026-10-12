@@ -57,8 +57,7 @@ public sealed class RegisterExpenseFormatterTests
             new BillingCycle(new DateOnly(2026, 3, 15), new DateOnly(2026, 4, 14)),
             140, 100, 140, 40, categories);
         var progress = new CategoryLimitProgress(Category.Mercado, 100, 130, 130, true);
-        string expectedAlert = string.Join(Environment.NewLine, new[]
-        {
+        string expectedAlert = string.Join(Environment.NewLine,
             "⚠️ ALERTA AMARELO: gasto do ciclo acima do anterior",
             "",
             "Ciclo atual (15/04/2026 a 14/05/2026): R$ 140,00",
@@ -76,8 +75,7 @@ public sealed class RegisterExpenseFormatterTests
             "• Outros: R$ 0,00 vs R$ 0,00 (sem gastos nos dois períodos)",
             "• Estetica: R$ 0,00 vs R$ 0,00 (sem gastos nos dois períodos)",
             "• Limpeza: R$ 0,00 vs R$ 0,00 (sem gastos nos dois períodos)",
-            "• Saude: R$ 0,00 vs R$ 0,00 (sem gastos nos dois períodos)"
-        });
+            "• Saude: R$ 0,00 vs R$ 0,00 (sem gastos nos dois períodos)");
 
         Assert.Equal("Compra registrada: R$ 130,00 - Mercado\n⚠ Limite de Mercado ultrapassado: R$ 130,00 de R$ 100,00\n\n" + expectedAlert,
             RegisterExpenseFormatter.Format(new RegisterExpenseResult.Success(Expense, progress, alert)));

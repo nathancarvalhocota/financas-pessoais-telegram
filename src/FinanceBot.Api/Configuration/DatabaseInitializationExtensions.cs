@@ -21,7 +21,7 @@ public static class DatabaseInitializationExtensions
         try
         {
             TimeProvider timeProvider = services.GetService<TimeProvider>() ?? TimeProvider.System;
-            for (int attempt = 1; ; attempt++)
+            for (int attempt = 1; attempt <= MaxAttempts; attempt++)
             {
                 stage = "resolve";
                 cancellationToken.ThrowIfCancellationRequested();

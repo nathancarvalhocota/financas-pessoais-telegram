@@ -1,3 +1,4 @@
+using System.Globalization;
 using FinanceBot.Api.Commands.Parsing;
 using FinanceBot.Api.Commands.Results;
 using FinanceBot.Domain.Categories;
@@ -7,7 +8,7 @@ namespace FinanceBot.UnitTests.Api.Commands;
 
 public sealed class ExpenseListQueryParserTests
 {
-    private static readonly DateTimeOffset MessageDate = DateTimeOffset.Parse("2026-04-15T02:59:59Z");
+    private static readonly DateTimeOffset MessageDate = DateTimeOffset.Parse("2026-04-15T02:59:59Z", CultureInfo.InvariantCulture);
 
     [Theory]
     [InlineData("", "2026-03-15", "2026-04-14", "2026-03-15T03:00:00Z", "2026-04-15T03:00:00Z")]
@@ -18,9 +19,9 @@ public sealed class ExpenseListQueryParserTests
     {
         ExpenseListQuery query = ParseSuccess(text);
 
-        Assert.Equal(new ExpensePeriod(ExpensePeriodKind.BillingCycle, DateOnly.Parse(start), DateOnly.Parse(end)), query.Period);
-        Assert.Equal(DateTimeOffset.Parse(startUtc).UtcDateTime, query.PeriodStartUtc);
-        Assert.Equal(DateTimeOffset.Parse(endUtc).UtcDateTime, query.PeriodEndExclusiveUtc);
+        Assert.Equal(new ExpensePeriod(ExpensePeriodKind.BillingCycle, DateOnly.Parse(start, CultureInfo.InvariantCulture), DateOnly.Parse(end, CultureInfo.InvariantCulture)), query.Period);
+        Assert.Equal(DateTimeOffset.Parse(startUtc, CultureInfo.InvariantCulture).UtcDateTime, query.PeriodStartUtc);
+        Assert.Equal(DateTimeOffset.Parse(endUtc, CultureInfo.InvariantCulture).UtcDateTime, query.PeriodEndExclusiveUtc);
         Assert.Equal(DateTimeKind.Utc, query.PeriodStartUtc.Kind);
         Assert.Equal(DateTimeKind.Utc, query.PeriodEndExclusiveUtc.Kind);
         Assert.Equal(CategoryFilterMode.None, query.CategoryFilter.Mode);
@@ -37,9 +38,9 @@ public sealed class ExpenseListQueryParserTests
     {
         ExpenseListQuery query = ParseSuccess(text);
 
-        Assert.Equal(new ExpensePeriod(ExpensePeriodKind.DateRange, DateOnly.Parse(start), DateOnly.Parse(end)), query.Period);
-        Assert.Equal(DateTimeOffset.Parse(startUtc).UtcDateTime, query.PeriodStartUtc);
-        Assert.Equal(DateTimeOffset.Parse(endUtc).UtcDateTime, query.PeriodEndExclusiveUtc);
+        Assert.Equal(new ExpensePeriod(ExpensePeriodKind.DateRange, DateOnly.Parse(start, CultureInfo.InvariantCulture), DateOnly.Parse(end, CultureInfo.InvariantCulture)), query.Period);
+        Assert.Equal(DateTimeOffset.Parse(startUtc, CultureInfo.InvariantCulture).UtcDateTime, query.PeriodStartUtc);
+        Assert.Equal(DateTimeOffset.Parse(endUtc, CultureInfo.InvariantCulture).UtcDateTime, query.PeriodEndExclusiveUtc);
     }
 
     [Theory]

@@ -30,7 +30,7 @@ public static class TelegramWebhookEndpoint
     {
         ILogger logger = loggerFactory.CreateLogger("TelegramWebhook");
         long started = Stopwatch.GetTimestamp();
-        string outcome = "failed";
+        string outcome = "processed";
         string stage = "authentication";
         string? recognizedCommand = null;
         string? exceptionType = null;
@@ -91,7 +91,6 @@ public static class TelegramWebhookEndpoint
                 messageDateUtc,
                 cancellationToken);
 
-            outcome = "processed";
             stage = "sendMessage";
             try
             {
@@ -122,7 +121,12 @@ public static class TelegramWebhookEndpoint
         finally
         {
             logger.Log(
-                outcome == "failed" ? LogLevel.Error : outcome == "rejected" ? LogLevel.Warning : LogLevel.Information,
+                outcome switch
+                {
+                    "failed" => LogLevel.Error,
+                    "rejected" => LogLevel.Warning,
+                    _ => LogLevel.Information
+                },
                 new EventId(1001, "TelegramWebhookCompleted"),
                 "Telegram webhook processing completed. Request: {RequestId}; duration ms: {DurationMs}; outcome: {Outcome}; command: {Command}; stage: {Stage}; exception type: {ExceptionType}.",
                 request.HttpContext.TraceIdentifier,

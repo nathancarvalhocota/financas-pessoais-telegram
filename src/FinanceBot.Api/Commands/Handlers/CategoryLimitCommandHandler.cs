@@ -12,11 +12,13 @@ public sealed class CategoryLimitCommandHandler
 {
     private static readonly Regex SetCategoryLimitCommandRegex = new Regex(
         "^/limite(?:@[A-Za-z0-9_]+)?\\s+(\\S+)\\s+([0-9]+(?:[.,][0-9]{1,2})?)\\s*$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        TimeSpan.FromSeconds(1));
 
     private static readonly Regex GetCategoryLimitCommandRegex = new Regex(
         "^/limite(?:@[A-Za-z0-9_]+)?\\s+(\\S+)\\s*$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        TimeSpan.FromSeconds(1));
 
     private readonly IExpenseRepository _expenseRepository;
     private readonly ICategoryLimitRepository _categoryLimitRepository;
@@ -34,13 +36,23 @@ public sealed class CategoryLimitCommandHandler
 
     public async Task<CategoryLimitResult> HandleSetCategoryLimitAsync(string messageText, CancellationToken cancellationToken)
     {
-        Match getLimitMatch = GetCategoryLimitCommandRegex.Match(messageText);
-        if (getLimitMatch.Success && !SetCategoryLimitCommandRegex.IsMatch(messageText))
+        Match getLimitMatch;
+        Match setLimitMatch;
+        try
+        {
+            getLimitMatch = GetCategoryLimitCommandRegex.Match(messageText);
+            setLimitMatch = SetCategoryLimitCommandRegex.Match(messageText);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return new CategoryLimitResult.Failure(new CategoryLimitError.InvalidSyntax());
+        }
+
+        if (getLimitMatch.Success && !setLimitMatch.Success)
         {
             return await HandleGetAsync(getLimitMatch, cancellationToken);
         }
 
-        Match setLimitMatch = SetCategoryLimitCommandRegex.Match(messageText);
         if (!setLimitMatch.Success)
         {
             return new CategoryLimitResult.Failure(new CategoryLimitError.InvalidSyntax());
@@ -85,7 +97,7 @@ public sealed class CategoryLimitCommandHandler
             {
                 CategoryLimitValidationError.InvalidCategory => new CategoryLimitError.UnknownCategory(categoryText),
                 CategoryLimitValidationError.InvalidValue => new CategoryLimitError.InvalidLimit(),
-                _ => throw new ArgumentOutOfRangeException(nameof(failure.Error))
+                _ => throw new InvalidOperationException("Unknown category limit domain error.")
             };
             return new CategoryLimitResult.Failure(error);
         }

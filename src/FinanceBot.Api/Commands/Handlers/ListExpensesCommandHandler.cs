@@ -9,7 +9,8 @@ public sealed class ListExpensesCommandHandler
 {
     private static readonly Regex ListExpensesCommandRegex = new Regex(
         "^/listar(?:\\s+(.+))?$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        TimeSpan.FromSeconds(1));
 
     private readonly IExpenseRepository _expenseRepository;
 
@@ -23,7 +24,15 @@ public sealed class ListExpensesCommandHandler
         DateTimeOffset messageDateUtc,
         CancellationToken cancellationToken)
     {
-        Match commandMatch = ListExpensesCommandRegex.Match(messageText);
+        Match commandMatch;
+        try
+        {
+            commandMatch = ListExpensesCommandRegex.Match(messageText);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return new ListExpensesResult.Failure(new ListExpensesError.InvalidSyntax());
+        }
         if (!commandMatch.Success)
         {
             return new ListExpensesResult.Failure(new ListExpensesError.InvalidSyntax());

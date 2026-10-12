@@ -1,3 +1,4 @@
+using System.Globalization;
 using FinanceBot.Domain.Expenses;
 using FinanceBot.Domain.CategoryLimits;
 using FinanceBot.Api.Commands;
@@ -475,8 +476,8 @@ public sealed class TelegramCommandRouterTests
     public async Task RouteAsync_ListDateRange_QueriesCompleteCalendarDaysAndPreservesOrder(
         string command, string startText, string endExclusiveText, string description)
     {
-        DateTime startUtc = DateTimeOffset.Parse(startText).UtcDateTime;
-        DateTime endExclusiveUtc = DateTimeOffset.Parse(endExclusiveText).UtcDateTime;
+        DateTime startUtc = DateTimeOffset.Parse(startText, CultureInfo.InvariantCulture).UtcDateTime;
+        DateTime endExclusiveUtc = DateTimeOffset.Parse(endExclusiveText, CultureInfo.InvariantCulture).UtcDateTime;
         InMemoryExpenseRepository repository = new InMemoryExpenseRepository();
         await SeedPeriodBoundariesAsync(repository, startUtc, endExclusiveUtc);
         TelegramCommandRouter router = new TelegramCommandRouter(repository, new InMemoryCategoryLimitRepository());
@@ -501,13 +502,13 @@ public sealed class TelegramCommandRouterTests
     public async Task RouteAsync_ListWithoutDates_UsesMessageBusinessDateAndExclusiveNextCycle(
         string messageDateText, string startText, string endExclusiveText, string description)
     {
-        DateTime startUtc = DateTimeOffset.Parse(startText).UtcDateTime;
-        DateTime endExclusiveUtc = DateTimeOffset.Parse(endExclusiveText).UtcDateTime;
+        DateTime startUtc = DateTimeOffset.Parse(startText, CultureInfo.InvariantCulture).UtcDateTime;
+        DateTime endExclusiveUtc = DateTimeOffset.Parse(endExclusiveText, CultureInfo.InvariantCulture).UtcDateTime;
         InMemoryExpenseRepository repository = new InMemoryExpenseRepository();
         await SeedPeriodBoundariesAsync(repository, startUtc, endExclusiveUtc);
         TelegramCommandRouter router = new TelegramCommandRouter(repository, new InMemoryCategoryLimitRepository());
 
-        string response = await router.RouteMessageAsync("/listar", DateTimeOffset.Parse(messageDateText), CancellationToken.None);
+        string response = await router.RouteMessageAsync("/listar", DateTimeOffset.Parse(messageDateText, CultureInfo.InvariantCulture), CancellationToken.None);
 
         Assert.Equal((startUtc, endExclusiveUtc), Assert.Single(repository.QueriedPeriods));
         Assert.Contains($"Compras de {description}:", response);
@@ -552,8 +553,8 @@ public sealed class TelegramCommandRouterTests
     public async Task RouteAsync_QueryLimit_UsesTimeProviderCycleWithExclusiveEnd(
         string nowText, string startText, string endExclusiveText)
     {
-        DateTime startUtc = DateTimeOffset.Parse(startText).UtcDateTime;
-        DateTime endExclusiveUtc = DateTimeOffset.Parse(endExclusiveText).UtcDateTime;
+        DateTime startUtc = DateTimeOffset.Parse(startText, CultureInfo.InvariantCulture).UtcDateTime;
+        DateTime endExclusiveUtc = DateTimeOffset.Parse(endExclusiveText, CultureInfo.InvariantCulture).UtcDateTime;
         InMemoryExpenseRepository repository = new InMemoryExpenseRepository();
         await SeedPeriodBoundariesAsync(repository, startUtc, endExclusiveUtc);
         await repository.AddAsync(Assert.IsType<ExpenseCreationResult.Success>(Expense.Create(500, "Outra categoria", Category.Uber, startUtc)).Expense, CancellationToken.None);
@@ -563,7 +564,7 @@ public sealed class TelegramCommandRouterTests
             new RegisterExpenseCommandHandler(repository, limits),
             new ListExpensesCommandHandler(repository),
             new DeleteExpenseCommandHandler(repository),
-            new CategoryLimitCommandHandler(repository, limits, new FixedTimeProvider(DateTimeOffset.Parse(nowText))));
+            new CategoryLimitCommandHandler(repository, limits, new FixedTimeProvider(DateTimeOffset.Parse(nowText, CultureInfo.InvariantCulture))));
 
         string response = await router.RouteMessageAsync("/limite Mercado", AbrilDeVinteSeis, CancellationToken.None);
 

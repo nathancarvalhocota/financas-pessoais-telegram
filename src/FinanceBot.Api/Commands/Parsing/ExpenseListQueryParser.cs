@@ -25,37 +25,49 @@ public static class ExpenseListQueryParser
 {
     private static readonly Regex DateRangeRegex = new Regex(
         "^(?<start>\\d{2}/\\d{2}/(?:\\d{2}|\\d{4}))\\s*-\\s*(?<end>\\d{2}/\\d{2}/(?:\\d{2}|\\d{4}))(?:\\s+(?<filter>.+))?$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
 
     private static readonly Regex DatePrefixRegex = new Regex(
         "^\\d{2}/\\d{2}/",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
 
     private static readonly Regex MonthYearShapeRegex = new Regex(
         "^\\d{2}/\\d{2}$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
 
     private static readonly Regex DateRegex = new Regex(
         "^(\\d{2})/(\\d{2})/(\\d{2}|\\d{4})$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
 
     public static ExpenseListQueryParseResult Parse(
         string argumentsText,
         DateTimeOffset messageDateUtc)
     {
-        Match dateRangeMatch = DateRangeRegex.Match(argumentsText);
-        if (dateRangeMatch.Success)
+        try
         {
-            return ParseDateRange(dateRangeMatch);
-        }
+            Match dateRangeMatch = DateRangeRegex.Match(argumentsText);
+            if (dateRangeMatch.Success)
+            {
+                return ParseDateRange(dateRangeMatch);
+            }
 
-        if (DatePrefixRegex.IsMatch(argumentsText))
+            if (DatePrefixRegex.IsMatch(argumentsText))
+            {
+                return new ExpenseListQueryParseResult.Failure(
+                    new ListExpensesError.InvalidDate());
+            }
+
+            return ParseBillingCycle(argumentsText, messageDateUtc);
+        }
+        catch (RegexMatchTimeoutException)
         {
             return new ExpenseListQueryParseResult.Failure(
-                new ListExpensesError.InvalidDate());
+                new ListExpensesError.InvalidSyntax());
         }
-
-        return ParseBillingCycle(argumentsText, messageDateUtc);
     }
 
     private static ExpenseListQueryParseResult ParseDateRange(Match dateRangeMatch)
@@ -205,7 +217,8 @@ public static class ExpenseListQueryParser
         Match monthYearMatch = Regex.Match(
             monthYearText,
             "^(0[1-9]|1[0-2])/(\\d{2})$",
-            RegexOptions.CultureInvariant);
+            RegexOptions.CultureInvariant,
+            TimeSpan.FromSeconds(1));
 
         if (!monthYearMatch.Success)
         {

@@ -145,11 +145,11 @@ public sealed class DeleteExpenseCommandHandlerTests
             if (FailStage == stage) throw Exception!;
         }
 
-        public Task<Expense?> FindByIdAsync(int id, CancellationToken cancellationToken)
+        public Task<Expense?> FindByIdAsync(int expenseId, CancellationToken cancellationToken)
         {
             Record("find", cancellationToken);
-            RequestedIds.Add(id);
-            return Task.FromResult(Items.SingleOrDefault(item => item.Id == id));
+            RequestedIds.Add(expenseId);
+            return Task.FromResult(Items.SingleOrDefault(item => item.Id == expenseId));
         }
 
         public Task DeleteAsync(Expense expense, CancellationToken cancellationToken)
@@ -161,7 +161,7 @@ public sealed class DeleteExpenseCommandHandlerTests
         }
 
         public Task AddAsync(Expense expense, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Expense>> ListByPeriodAsync(DateTime startUtc, DateTime endExclusiveUtc,
+        public Task<IReadOnlyList<Expense>> ListByPeriodAsync(DateTime periodStartUtc, DateTime periodEndExclusiveUtc,
             CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

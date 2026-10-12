@@ -88,9 +88,19 @@ public sealed class RegisterExpenseCommandHandler
         {
             double current = currentExpenses.Where(item => item.Category == category).Sum(item => item.Amount);
             double previous = previousExpenses.Where(item => item.Category == category).Sum(item => item.Amount);
-            SpendingComparison comparison = previous <= 0
-                ? current <= 0 ? new SpendingComparison.NoSpending() : new SpendingComparison.NoHistory()
-                : new SpendingComparison.Comparable((int)Math.Round(current / previous * 100), current - previous);
+            SpendingComparison comparison;
+            if (previous <= 0 && current <= 0)
+            {
+                comparison = new SpendingComparison.NoSpending();
+            }
+            else if (previous <= 0)
+            {
+                comparison = new SpendingComparison.NoHistory();
+            }
+            else
+            {
+                comparison = new SpendingComparison.Comparable((int)Math.Round(current / previous * 100), current - previous);
+            }
             categories.Add(new CategorySpendingComparison(category, current, previous, comparison));
         }
 

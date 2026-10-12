@@ -8,11 +8,20 @@ public static class ExpenseParser
 {
     private static readonly Regex CommandRegex = new(
         "^/compra(?:@[A-Za-z0-9_]+)?\\s+([0-9]+(?:[.,][0-9]{1,2})?)\\s*,\\s*(.+?)\\s*,\\s*(.+)$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        TimeSpan.FromSeconds(1));
 
     public static ExpenseParseResult Parse(string text)
     {
-        Match match = CommandRegex.Match(text);
+        Match match;
+        try
+        {
+            match = CommandRegex.Match(text);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return new ExpenseParseResult.Failure(new ExpenseParseError.InvalidSyntax());
+        }
         if (!match.Success)
             return new ExpenseParseResult.Failure(new ExpenseParseError.InvalidSyntax());
 

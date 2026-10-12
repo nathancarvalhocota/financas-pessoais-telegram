@@ -165,7 +165,7 @@ public sealed class DatabaseInitializationTests
         Assert.False(startup.IsCompleted);
         ControlledTimer timer = await fixture.Clock.NextDelayAsync();
 
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => startup.WaitAsync(TimeSpan.FromSeconds(5)));
 
         Assert.Equal(1, fixture.Migrator.Calls);
@@ -184,7 +184,7 @@ public sealed class DatabaseInitializationTests
     {
         using var fixture = new StartupFixture(_ => null);
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.StartAsync(cancellation.Token));
 

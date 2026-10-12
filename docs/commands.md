@@ -2,6 +2,8 @@
 
 Os comandos abaixo são processados pela API. As categorias aceitas são `educacao`, `lazer`, `lanches`, `uber`, `mercado`, `moto`, `compras`, `outros`, `estetica`, `limpeza` e `saude`. A busca ignora acentos, maiúsculas, espaços e pontuação; categorias compostas não são aceitas.
 
+O parsing dos quatro comandos financeiros limita cada execução de expressão regular a um segundo. Se esse limite for atingido, o comando retorna a orientação de sintaxe já existente, sem acessar os repositórios. Os formatos aceitos e a lista de comandos permanecem os mesmos.
+
 ## `/compra` — registrar uma compra
 
 ```text
