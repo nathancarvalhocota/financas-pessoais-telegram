@@ -1,5 +1,5 @@
-using FinanceBot.Application.Compras;
-using FinanceBot.Application.Limites;
+using FinanceBot.Domain.Expenses;
+using FinanceBot.Domain.CategoryLimits;
 using FinanceBot.Infrastructure.Persistence;
 using FinanceBot.Infrastructure.Repositories;
 using Microsoft.Extensions.Configuration;
@@ -28,8 +28,8 @@ public static class InfrastructureServiceCollectionExtensions
             options.UseNpgsql(connectionString);
         });
 
-        services.AddScoped<ICompraRepository, CompraRepository>();
-        services.AddScoped<ILimiteCategoriaRepository, LimiteCategoriaRepository>();
+        services.AddScoped<IExpenseRepository, ExpenseRepository>();
+        services.AddScoped<ICategoryLimitRepository, CategoryLimitRepository>();
 
         return services;
     }

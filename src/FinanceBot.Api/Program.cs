@@ -1,12 +1,12 @@
-using FinanceBot.Api.Telegram;
-using FinanceBot.Application.Commands;
-using FinanceBot.Application.Commands.Handlers;
+using FinanceBot.Api.Commands;
+using FinanceBot.Api.Commands.Handlers;
+using FinanceBot.Api.Configuration;
+using FinanceBot.Api.Endpoints;
+using FinanceBot.Api.Messaging;
 using FinanceBot.Infrastructure.DependencyInjection;
-using FinanceBot.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
-builder.Configuration.AddUserSecrets<Program>(optional: true, reloadOnChange: true);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<RegisterExpenseCommandHandler>();
 builder.Services.AddScoped<ListExpensesCommandHandler>();
@@ -17,21 +17,15 @@ builder.Services.AddScoped<TelegramCommandRouter>(serviceProvider => new Telegra
     serviceProvider.GetRequiredService<ListExpensesCommandHandler>(),
     serviceProvider.GetRequiredService<DeleteExpenseCommandHandler>(),
     serviceProvider.GetRequiredService<CategoryLimitCommandHandler>()));
-builder.Services.Configure<TelegramOptions>(
-    builder.Configuration.GetSection(TelegramOptions.SectionName));
-builder.Services.AddHttpClient<TelegramMessageSender>();
+builder.Services.AddTelegramMessaging(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
 
 WebApplication app = builder.Build();
 
-using (IServiceScope scope = app.Services.CreateScope())
-{
-    FinanceBotDbContext db = scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>();
-    if (db.Database.IsRelational())
-    {
-        await db.Database.MigrateAsync();
-    }
-}
+// Validate before migrations: ValidateOnStart alone runs later, when the host starts.
+_ = app.Services.GetRequiredService<IOptions<TelegramOptions>>().Value;
+
+await app.Services.InitializeDatabaseAsync(app.Logger);
 
 app.MapGet("/health", static () => Results.Ok("ok"));
 app.MapTelegramWebhookEndpoint();

@@ -1,0 +1,12 @@
+namespace FinanceBot.Api.Configuration;
+
+public sealed class TelegramOptions
+{
+    public const string SectionName = "Telegram";
+
+    public string BotToken { get; init; } = string.Empty;
+
+    public string WebhookSecret { get; init; } = string.Empty;
+
+    public long[] AllowedChatIds { get; init; } = [];
+}

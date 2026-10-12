@@ -1,47 +1,37 @@
-# FinanceBot – Context for Codex
+# FinanceBot — contexto para agentes
 
-## O que é este projeto
-Bot do Telegram para controle financeiro pessoal. Uso individual. O usuário envia comandos via chat, o Telegram entrega via webhook para a API, que valida, persiste no PostgreSQL e responde.
+## Projeto
+
+Bot pessoal do Telegram para registrar e consultar despesas. O webhook recebe os comandos, a aplicação valida e executa as operações, e as respostas vão aos chats autorizados.
 
 ## Stack
-- .NET 8, ASP.NET Core Minimal API
-- PostgreSQL + EF Core (Npgsql)
-- Telegram Bot API (biblioteca `Telegram.Bot`)
-- Credenciais via user-secrets (nunca em appsettings)
 
-## Estrutura de projetos
-```
+- .NET 8 e ASP.NET Core Minimal API
+- PostgreSQL com Entity Framework Core e Npgsql
+- Telegram Bot API via biblioteca `Telegram.Bot`
+
+## Estrutura
+
+```text
 src/
-  FinanceBot.Api/            # Webhook endpoint, DI root, Program.cs
-  FinanceBot.Application/    # Use cases: TelegramCommandRouter, interfaces
-  FinanceBot.Domain/         # Entidades (Compra), enums (Categoria)
-  FinanceBot.Infrastructure/ # EF Core, repositórios, TelegramMessageSender
+  FinanceBot.Api/            # Endpoints, Messaging, Configuration e Commands
+  FinanceBot.Domain/         # Entidades, regras financeiras e contratos de repositório
+  FinanceBot.Infrastructure/ # Persistência e repositórios
 tests/
   FinanceBot.UnitTests/
   FinanceBot.IntegrationTests/
 ```
 
-## Comandos do bot
-| Comando | Formato | Exemplo |
-|---------|---------|---------|
-| `/compra` | `/compra <VALOR>, <DESCRICAO>, <CATEGORIA>` | `/compra 58,90, Almoço, Mercado` |
-| `/listar` | `/listar <MM/YY>` (mês atual se omitido) | `/listar 04/26` |
-| `/deletar` | `/deletar <ID>` | `/deletar 42` |
+## Referências por tarefa
 
-## Categorias válidas (chave de lookup normalizada → display)
-| Digitar | Exibe |
-|---------|-------|
-| `educacao` | Educacao |
-| `lazer` | Lazer |
-| `lanches` | Lanches |
-| `uber` | Uber |
-| `mercado` | Mercado |
-| `moto` | Moto |
-| `compras` | Compras |
-| `outros` | Outros |
-| `estetica` | Estetica |
-| `limpeza` | Limpeza |
-| `saude` | Saude |
+- Ao alterar formato ou comportamento de comando, consulte [`docs/commands.md`](docs/commands.md).
+- Ao alterar ciclo, fuso, categoria, limite ou alerta, consulte [`docs/domain.md`](docs/domain.md).
+- Ao alterar dependências entre projetos ou fluxo do webhook, consulte [`docs/architecture.md`](docs/architecture.md).
+- Ao escrever ou mudar testes, consulte [`docs/testing.md`](docs/testing.md).
+- Ao configurar a execução local, credenciais, banco ou webhook, consulte [`docs/config.md`](docs/config.md).
 
-A normalização remove acentos, espaços e maiúsculas — `Lázèr`, `LAZER`, `lazer` são equivalentes.
+## Regras do projeto
 
+- Mantenha credenciais fora de arquivos versionados; use User Secrets ou variáveis de ambiente.
+- Ao adicionar, remover ou alterar comandos, atualize `docs/commands.md`, a lista usada em `/setcommands` em `docs/config.md` e a resposta de `/info` para refletir os comandos implementados em `TelegramCommandRouter`.
+- Trate o comportamento implementado no código e nos testes como referência atual; atualize a documentação afetada junto com a mudança.
