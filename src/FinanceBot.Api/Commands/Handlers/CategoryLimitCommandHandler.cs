@@ -1,14 +1,12 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using FinanceBot.Application.Commands;
-using FinanceBot.Application.Commands.Formatting;
-using FinanceBot.Application.Compras;
-using FinanceBot.Application.Limites;
-using FinanceBot.Domain.Categories;
-using FinanceBot.Domain.CategoryLimits;
+using FinanceBot.Api.Commands;
+using FinanceBot.Api.Commands.Formatting;
 using FinanceBot.Domain.Expenses;
+using FinanceBot.Domain.CategoryLimits;
+using FinanceBot.Domain.Categories;
 
-namespace FinanceBot.Application.Commands.Handlers;
+namespace FinanceBot.Api.Commands.Handlers;
 
 public sealed class CategoryLimitCommandHandler
 {

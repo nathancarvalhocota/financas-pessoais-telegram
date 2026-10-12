@@ -1,7 +1,6 @@
 using FinanceBot.Domain.Categories;
-using FinanceBot.Domain.CategoryLimits;
 
-namespace FinanceBot.Application.Limites;
+namespace FinanceBot.Domain.CategoryLimits;
 
 public interface ILimiteCategoriaRepository
 {

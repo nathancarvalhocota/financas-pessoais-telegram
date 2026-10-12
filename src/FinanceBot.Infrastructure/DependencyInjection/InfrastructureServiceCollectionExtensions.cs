@@ -1,5 +1,5 @@
-using FinanceBot.Application.Compras;
-using FinanceBot.Application.Limites;
+using FinanceBot.Domain.Expenses;
+using FinanceBot.Domain.CategoryLimits;
 using FinanceBot.Infrastructure.Persistence;
 using FinanceBot.Infrastructure.Repositories;
 using Microsoft.Extensions.Configuration;

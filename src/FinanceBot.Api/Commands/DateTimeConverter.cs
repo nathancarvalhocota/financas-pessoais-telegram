@@ -1,6 +1,6 @@
 using FinanceBot.Domain.Billing;
 
-namespace FinanceBot.Application.Commands;
+namespace FinanceBot.Api.Commands;
 
 internal static class DateTimeConverter
 {

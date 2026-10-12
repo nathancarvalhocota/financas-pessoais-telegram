@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace FinanceBot.Application.Commands.Formatting;
+namespace FinanceBot.Api.Commands.Formatting;
 
 internal static class BrazilianCurrencyFormatter
 {

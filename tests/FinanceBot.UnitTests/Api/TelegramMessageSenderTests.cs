@@ -1,7 +1,8 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using FinanceBot.Api.Telegram;
+using FinanceBot.Api.Configuration;
+using FinanceBot.Api.Messaging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -45,27 +46,6 @@ public sealed class TelegramMessageSenderTests
 
         Assert.Equal(9999, jsonRoot.GetProperty("chat_id").GetInt64());
         Assert.Equal("Mensagem de teste", jsonRoot.GetProperty("text").GetString());
-    }
-
-    [Fact]
-    public async Task SendMessageAsync_WithoutToken_DoesNotCallTelegramApi()
-    {
-        RecordingHttpMessageHandler recordingHttpMessageHandler = new RecordingHttpMessageHandler();
-        HttpClient httpClient = new HttpClient(recordingHttpMessageHandler);
-        IOptions<TelegramOptions> telegramOptions = Options.Create(
-            new TelegramOptions
-            {
-                BotToken = string.Empty
-            });
-
-        TelegramMessageSender telegramMessageSender = new TelegramMessageSender(
-            httpClient,
-            NullLogger<TelegramMessageSender>.Instance,
-            telegramOptions);
-
-        await telegramMessageSender.SendMessageAsync(9999, "Mensagem de teste", CancellationToken.None);
-
-        Assert.Null(recordingHttpMessageHandler.LastRequest);
     }
 
     [Fact]

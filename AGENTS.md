@@ -14,9 +14,8 @@ Bot pessoal do Telegram para registrar e consultar despesas. O webhook recebe os
 
 ```text
 src/
-  FinanceBot.Api/            # Webhook, configuração e composição da aplicação
-  FinanceBot.Application/    # Comandos e fluxos de aplicação
-  FinanceBot.Domain/         # Entidades e regras financeiras
+  FinanceBot.Api/            # Endpoints, Messaging, Configuration e Commands
+  FinanceBot.Domain/         # Entidades, regras financeiras e contratos de repositório
   FinanceBot.Infrastructure/ # Persistência e repositórios
 tests/
   FinanceBot.UnitTests/

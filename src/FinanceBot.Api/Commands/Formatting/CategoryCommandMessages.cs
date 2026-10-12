@@ -1,6 +1,6 @@
 using FinanceBot.Domain.Categories;
 
-namespace FinanceBot.Application.Commands.Formatting;
+namespace FinanceBot.Api.Commands.Formatting;
 
 internal static class CategoryCommandMessages
 {

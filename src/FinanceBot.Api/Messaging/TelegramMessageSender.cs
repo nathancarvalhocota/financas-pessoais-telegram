@@ -1,9 +1,10 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using FinanceBot.Api.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace FinanceBot.Api.Telegram;
+namespace FinanceBot.Api.Messaging;
 
 public sealed class TelegramMessageSender
 {
@@ -24,30 +25,30 @@ public sealed class TelegramMessageSender
     public async Task SendMessageAsync(long chatId, string text, CancellationToken cancellationToken)
     {
         string botToken = _telegramOptions.Value.BotToken;
-        if (string.IsNullOrWhiteSpace(botToken))
-        {
-            _logger.LogWarning(
-                "Telegram bot token is missing. Configure Telegram:BotToken to enable sendMessage.");
-            return;
-        }
-
         string requestUri = $"https://api.telegram.org/bot{botToken}/sendMessage";
         SendMessageRequest request = new SendMessageRequest(chatId, text);
-        HttpResponseMessage response = await _httpClient.PostAsJsonAsync(
-            requestUri,
-            request,
-            cancellationToken);
-
-        if (response.IsSuccessStatusCode)
+        try
         {
-            return;
-        }
+            using HttpResponseMessage response = await _httpClient.PostAsJsonAsync(
+                requestUri,
+                request,
+                cancellationToken);
 
-        string responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
-        _logger.LogError(
-            "Telegram sendMessage failed with status code {StatusCode}. Body: {Body}",
-            (int)response.StatusCode,
-            responseContent);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError(
+                    "Telegram sendMessage failed. Stage: {Stage}; status code: {StatusCode}.",
+                    "sendMessage", (int)response.StatusCode);
+            }
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                "Telegram sendMessage failed. Stage: {Stage}; exception type: {ExceptionType}; status: {StatusCode}.",
+                "sendMessage", exception.GetType().Name,
+                exception is HttpRequestException httpException ? (int?)httpException.StatusCode : null);
+            throw;
+        }
     }
 
     private sealed record SendMessageRequest(

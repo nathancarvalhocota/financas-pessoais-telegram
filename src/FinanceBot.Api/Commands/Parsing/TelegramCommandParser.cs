@@ -1,4 +1,4 @@
-namespace FinanceBot.Application.Commands.Parsing;
+namespace FinanceBot.Api.Commands.Parsing;
 
 internal sealed record TelegramCommand(string Name, string Text);
 

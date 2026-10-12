@@ -1,12 +1,10 @@
-using FinanceBot.Application.Compras;
-using FinanceBot.Application.Limites;
-using FinanceBot.Application.Commands;
-using FinanceBot.Domain.Categories;
-using FinanceBot.Domain.CategoryLimits;
 using FinanceBot.Domain.Expenses;
+using FinanceBot.Domain.CategoryLimits;
+using FinanceBot.Api.Commands;
+using FinanceBot.Domain.Categories;
 using Xunit;
 
-namespace FinanceBot.UnitTests.Application;
+namespace FinanceBot.UnitTests.Api.Commands;
 
 public sealed class TelegramCommandRouterTests
 {

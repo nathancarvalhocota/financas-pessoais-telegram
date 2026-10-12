@@ -1,9 +1,9 @@
-using FinanceBot.Application.Commands.Handlers;
-using FinanceBot.Application.Commands.Parsing;
-using FinanceBot.Application.Compras;
-using FinanceBot.Application.Limites;
+using FinanceBot.Api.Commands.Handlers;
+using FinanceBot.Api.Commands.Parsing;
+using FinanceBot.Domain.Expenses;
+using FinanceBot.Domain.CategoryLimits;
 
-namespace FinanceBot.Application.Commands;
+namespace FinanceBot.Api.Commands;
 
 public sealed class TelegramCommandRouter
 {

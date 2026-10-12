@@ -1,10 +1,9 @@
 using System.Text.RegularExpressions;
-using FinanceBot.Application.Commands.Formatting;
-using FinanceBot.Application.Commands.Parsing;
-using FinanceBot.Application.Compras;
+using FinanceBot.Api.Commands.Formatting;
+using FinanceBot.Api.Commands.Parsing;
 using FinanceBot.Domain.Expenses;
 
-namespace FinanceBot.Application.Commands.Handlers;
+namespace FinanceBot.Api.Commands.Handlers;
 
 public sealed class ListExpensesCommandHandler
 {

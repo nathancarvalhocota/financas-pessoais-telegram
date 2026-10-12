@@ -1,7 +1,10 @@
 using System.Net;
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json;
-using FinanceBot.Api.Telegram;
+using FinanceBot.Api.Endpoints;
+using FinanceBot.Api.Configuration;
+using FinanceBot.Api.Messaging;
 using FinanceBot.Domain.Categories;
 using FinanceBot.Domain.Expenses;
 using FinanceBot.Infrastructure.Persistence;
@@ -12,12 +15,105 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace FinanceBot.IntegrationTests.Api;
 
 public sealed class TelegramWebhookEndpointTests
 {
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("incorrect")]
+    [InlineData("multiple")]
+    [InlineData("comma-separated")]
+    public async Task PostWebhook_WithInvalidSecret_RejectsWithoutEffects(string scenario)
+    {
+        using FinanceBotApiFactory factory = new(998877);
+        using HttpClient client = factory.CreateClient();
+        client.DefaultRequestHeaders.Remove("X-Telegram-Bot-Api-Secret-Token");
+        if (scenario == "incorrect") client.DefaultRequestHeaders.Add("X-Telegram-Bot-Api-Secret-Token", "incorrect");
+        if (scenario == "multiple") client.DefaultRequestHeaders.Add("X-Telegram-Bot-Api-Secret-Token", new[] { FinanceBotApiFactory.Secret, "incorrect" });
+        if (scenario == "comma-separated") client.DefaultRequestHeaders.Add("X-Telegram-Bot-Api-Secret-Token", $"{FinanceBotApiFactory.Secret},incorrect");
+
+        using HttpResponseMessage response = await client.PostAsJsonAsync("/telegram/webhook", PurchaseRequest());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Empty(factory.RecordingTelegramMessageHandler.SentMessages);
+        using IServiceScope scope = factory.Services.CreateScope();
+        Assert.Empty(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras);
+    }
+
+    [Fact]
+    public async Task PostWebhook_WithAuthenticatedIgnoredUpdate_ReturnsOkWithoutEffects()
+    {
+        using FinanceBotApiFactory factory = new(998877);
+        using HttpClient client = factory.CreateClient();
+        using HttpResponseMessage response = await client.PostAsJsonAsync("/telegram/webhook", new { });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(factory.RecordingTelegramMessageHandler.SentMessages);
+        using IServiceScope scope = factory.Services.CreateScope();
+        Assert.Empty(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PostWebhook_WithSendFailureAfterPurchase_AcknowledgesAndLogsSafely(bool transportFailure)
+    {
+        using FinanceBotApiFactory factory = new(998877);
+        factory.RecordingTelegramMessageHandler.FailTransport = transportFailure;
+        factory.RecordingTelegramMessageHandler.ResponseStatus = HttpStatusCode.Forbidden;
+        using HttpClient client = factory.CreateClient();
+
+        using HttpResponseMessage response = await client.PostAsJsonAsync("/telegram/webhook", PurchaseRequest());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using IServiceScope scope = factory.Services.CreateScope();
+        Assert.Single(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras);
+        string logs = string.Join("\n", factory.Logs.Entries);
+        foreach (string sensitive in new[] { "test-token-identifiable", FinanceBotApiFactory.Secret, "PRIVATE_MESSAGE_IDENTIFIABLE", "RAW_BODY_IDENTIFIABLE", "INNER_EXCEPTION_IDENTIFIABLE", "api.telegram.org" })
+            Assert.DoesNotContain(sensitive, logs);
+        Assert.Contains(transportFailure ? "HttpRequestException" : "403", logs);
+        if (transportFailure) Assert.Contains("Failed to send Telegram reply", logs);
+    }
+
+    [Fact]
+    public async Task PostWebhook_WithCommandFailure_DoesNotAcknowledgeAsSuccess()
+    {
+        using FinanceBotApiFactory factory = new(998877) { FailCommand = true };
+        using HttpClient client = factory.CreateClient();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.PostAsJsonAsync("/telegram/webhook", PurchaseRequest()));
+        Assert.Empty(factory.RecordingTelegramMessageHandler.SentMessages);
+    }
+
+    [Theory]
+    [InlineData("Telegram:BotToken", "")]
+    [InlineData("Telegram:WebhookSecret", "invalid secret")]
+    [InlineData("Telegram:WebhookSecret", "")]
+    [InlineData("Telegram:AllowedChatIds", "")]
+    public void Startup_WithInvalidOptions_FailsBeforeResolvingDatabase(string key, string value)
+    {
+        using FinanceBotApiFactory factory = new(998877) { InvalidOption = new(key, value), RejectDatabaseResolution = true };
+        OptionsValidationException exception = Assert.Throws<OptionsValidationException>(() => factory.CreateClient());
+        Assert.Contains(key, exception.Message);
+        Assert.DoesNotContain("test-token-identifiable", exception.ToString());
+        Assert.DoesNotContain(FinanceBotApiFactory.Secret, exception.ToString());
+        Assert.False(factory.DatabaseResolved);
+        Assert.Empty(factory.RecordingTelegramMessageHandler.SentMessages);
+    }
+
+    private static TelegramWebhookRequest PurchaseRequest() => new()
+    {
+        Message = new TelegramMessageRequest
+        {
+            Chat = new TelegramChatRequest { Id = 998877 },
+            Text = "/compra 58,90, PRIVATE_MESSAGE_IDENTIFIABLE, Mercado",
+            Date = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+        }
+    };
+
     [Fact]
     public async Task PostWebhook_WithStartCommand_ReturnsOkAndSendsReply()
     {
@@ -311,6 +407,12 @@ public sealed class TelegramWebhookEndpointTests
 
     private sealed class FinanceBotApiFactory : WebApplicationFactory<Program>
     {
+        public const string Secret = "test-webhook-secret-identifiable";
+        public KeyValuePair<string, string?>? InvalidOption { get; init; }
+        public bool RejectDatabaseResolution { get; init; }
+        public bool DatabaseResolved { get; private set; }
+        public bool FailCommand { get; init; }
+        public CapturingLoggerProvider Logs { get; } = new();
         public FinanceBotApiFactory(params long[] allowedChatIds)
         {
             AllowedChatIds = allowedChatIds;
@@ -324,13 +426,28 @@ public sealed class TelegramWebhookEndpointTests
         public RecordingTelegramMessageHandler RecordingTelegramMessageHandler { get; } =
             new RecordingTelegramMessageHandler();
 
+        protected override IHost CreateHost(IHostBuilder builder)
+        {
+            // Infrastructure reads its connection string during service registration,
+            // before ConfigureWebHost's application configuration callbacks run.
+            builder.ConfigureHostConfiguration(configuration => configuration.AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:DefaultConnection"] =
+                        "Host=localhost;Port=5432;Database=fake;Username=fake;Password=fake"
+                }));
+            return base.CreateHost(builder);
+        }
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
-            builder.ConfigureLogging(logging => logging.ClearProviders());
+            builder.UseEnvironment("Testing");
+            builder.ConfigureLogging(logging => logging.ClearProviders().SetMinimumLevel(LogLevel.Trace).AddProvider(Logs));
 
             Dictionary<string, string?> testConfiguration = new Dictionary<string, string?>
             {
-                ["Telegram:BotToken"] = "test-token",
+                ["Telegram:BotToken"] = "test-token-identifiable",
+                ["Telegram:WebhookSecret"] = Secret,
                 ["ConnectionStrings:DefaultConnection"] =
                     "Host=localhost;Port=5432;Database=fake;Username=fake;Password=fake"
             };
@@ -338,6 +455,13 @@ public sealed class TelegramWebhookEndpointTests
             {
                 testConfiguration[$"Telegram:AllowedChatIds:{index}"] =
                     AllowedChatIds[index].ToString();
+            }
+            if (InvalidOption is { } invalid)
+            {
+                if (invalid.Key == "Telegram:AllowedChatIds")
+                    testConfiguration.Remove("Telegram:AllowedChatIds:0");
+                else
+                    testConfiguration[invalid.Key] = invalid.Value;
             }
 
             builder.ConfigureAppConfiguration((_, configurationBuilder) =>
@@ -347,22 +471,43 @@ public sealed class TelegramWebhookEndpointTests
 
             builder.ConfigureServices(services =>
             {
+                // Keep fixture options independent of developer secrets/environment.
+                services.RemoveAll<IConfigureOptions<TelegramOptions>>();
+                services.Configure<TelegramOptions>(new ConfigurationBuilder()
+                    .AddInMemoryCollection(testConfiguration).Build().GetSection("Telegram"));
                 services.RemoveAll<DbContextOptions<FinanceBotDbContext>>();
                 services.RemoveAll<FinanceBotDbContext>();
                 services.AddDbContext<FinanceBotDbContext>(options =>
                 {
                     options.UseInMemoryDatabase(DatabaseName);
                 });
+                if (RejectDatabaseResolution)
+                {
+                    services.AddScoped<FinanceBotDbContext>(_ =>
+                    {
+                        DatabaseResolved = true;
+                        throw new InvalidOperationException("Database must not be resolved before options validation.");
+                    });
+                }
+                if (FailCommand) services.AddScoped<ICompraRepository, FailingCompraRepository>();
 
                 services.RemoveAll<TelegramMessageSender>();
                 services.AddHttpClient<TelegramMessageSender>()
                     .ConfigurePrimaryHttpMessageHandler(() => RecordingTelegramMessageHandler);
             });
         }
+
+        protected override void ConfigureClient(HttpClient client)
+        {
+            base.ConfigureClient(client);
+            client.DefaultRequestHeaders.Add("X-Telegram-Bot-Api-Secret-Token", Secret);
+        }
     }
 
     private sealed class RecordingTelegramMessageHandler : HttpMessageHandler
     {
+        public bool FailTransport { get; set; }
+        public HttpStatusCode ResponseStatus { get; set; } = HttpStatusCode.OK;
         public List<SentTelegramMessage> SentMessages { get; } = new List<SentTelegramMessage>();
 
         protected override async Task<HttpResponseMessage> SendAsync(
@@ -376,8 +521,37 @@ public sealed class TelegramWebhookEndpointTests
                 payload.GetProperty("chat_id").GetInt64(),
                 payload.GetProperty("text").GetString() ?? string.Empty);
             SentMessages.Add(sentTelegramMessage);
-            return new HttpResponseMessage(HttpStatusCode.OK);
+            if (FailTransport)
+                throw new HttpRequestException($"{request.RequestUri} {FinanceBotApiFactory.Secret} PRIVATE_MESSAGE_IDENTIFIABLE",
+                    new Exception("INNER_EXCEPTION_IDENTIFIABLE test-token-identifiable"));
+            return new HttpResponseMessage(ResponseStatus)
+            {
+                Content = new StringContent($"RAW_BODY_IDENTIFIABLE {FinanceBotApiFactory.Secret} test-token-identifiable")
+            };
         }
+    }
+
+    private sealed class FailingCompraRepository : ICompraRepository
+    {
+        public Task AddAsync(Compra compra, CancellationToken cancellationToken) => throw new InvalidOperationException("Command persistence failed.");
+        public Task<IReadOnlyList<Compra>> ListByPeriodAsync(DateTime start, DateTime end, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Compra>>([]);
+        public Task<Compra?> FindByIdAsync(int id, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task DeleteAsync(Compra compra, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public ConcurrentQueue<string> Entries { get; } = new();
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(categoryName, Entries);
+        public void Dispose() { }
+    }
+
+    private sealed class CapturingLogger(string category, ConcurrentQueue<string> entries) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) => entries.Enqueue($"{category}: {formatter(state, exception)} {exception}");
     }
 
     private sealed record SentTelegramMessage(long ChatId, string Text);

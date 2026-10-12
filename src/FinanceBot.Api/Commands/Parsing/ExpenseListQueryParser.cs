@@ -1,11 +1,11 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using FinanceBot.Application.Commands;
-using FinanceBot.Application.Commands.Formatting;
+using FinanceBot.Api.Commands;
+using FinanceBot.Api.Commands.Formatting;
 using FinanceBot.Domain.Categories;
 
-namespace FinanceBot.Application.Commands.Parsing;
+namespace FinanceBot.Api.Commands.Parsing;
 
 internal enum CategoryFilterMode
 {

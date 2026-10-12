@@ -1,10 +1,9 @@
 using System.Text.RegularExpressions;
-using FinanceBot.Application.Commands.Formatting;
-using FinanceBot.Application.Compras;
-using FinanceBot.Domain.Categories;
+using FinanceBot.Api.Commands.Formatting;
 using FinanceBot.Domain.Expenses;
+using FinanceBot.Domain.Categories;
 
-namespace FinanceBot.Application.Commands.Handlers;
+namespace FinanceBot.Api.Commands.Handlers;
 
 public sealed class DeleteExpenseCommandHandler
 {

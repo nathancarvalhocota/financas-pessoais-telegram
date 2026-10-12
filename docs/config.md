@@ -1,6 +1,8 @@
-# Configuração e desenvolvimento local
+# Configuração, desenvolvimento local e Railway
 
-Este guia mostra como configurar e executar a API FinanceBot localmente e como expor o webhook do Telegram durante o desenvolvimento.
+Este guia mostra como configurar e executar a API FinanceBot localmente e no Railway, registrar o webhook e diagnosticar falhas de entrega.
+
+As instruções refletem o código atual. Os exemplos usam marcadores; mantenha valores reais nos User Secrets, nas variáveis do Railway ou em um gerenciador de segredos. Para a primeira publicação da versão que exige o secret, siga a ordem de ativação abaixo.
 
 ## Pré-requisitos
 
@@ -18,6 +20,7 @@ A API carrega User Secrets no ambiente de desenvolvimento. Configure os valores 
 ```powershell
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=financebot;Username=postgres;Password=SUA_SENHA" --project src/FinanceBot.Api
 dotnet user-secrets set "Telegram:BotToken" "SEU_TOKEN" --project src/FinanceBot.Api
+dotnet user-secrets set "Telegram:WebhookSecret" "<WEBHOOK_SECRET>" --project src/FinanceBot.Api
 dotnet user-secrets set "Telegram:AllowedChatIds:0" "SEU_CHAT_ID" --project src/FinanceBot.Api
 ```
 
@@ -25,7 +28,9 @@ Para permitir mais de um chat, configure índices adicionais: `Telegram:AllowedC
 
 O token é obtido com o `@BotFather`. O chat ID deve ser o identificador numérico do chat autorizado. Para conferir os secrets cadastrados, use `dotnet user-secrets list --project src/FinanceBot.Api`; não compartilhe a saída, pois ela contém credenciais.
 
-A aplicação exige `ConnectionStrings:DefaultConnection`. O PostgreSQL precisa estar acessível antes de iniciar a API.
+A aplicação exige `ConnectionStrings:DefaultConnection`, `Telegram:BotToken` não vazio, `Telegram:WebhookSecret` válido e pelo menos um `Telegram:AllowedChatIds`. O secret deve ser diferente do token e conter de 1 a 256 letras ASCII, dígitos, `_` ou `-`. Veja a geração e entrada protegida adiante. A validação identifica as chaves sem imprimir valores e ocorre antes de acessar o banco; não consulta o Telegram. O PostgreSQL precisa estar acessível para concluir a inicialização.
+
+A configuração usa os provedores padrão do ASP.NET Core: User Secrets apenas em Development e variáveis de ambiente com precedência sobre eles. Em produção, use as variáveis do serviço; não há carregamento adicional de User Secrets.
 
 ## Executar a API
 
@@ -35,7 +40,9 @@ Na raiz do repositório:
 dotnet run --project src/FinanceBot.Api
 ```
 
-Durante a inicialização, a API aplica migrations automaticamente quando o banco é relacional. O endpoint de saúde local fica em `http://localhost:5000/health`.
+Durante cada inicialização, a API verifica as migrations quando o banco é relacional e aplica apenas as pendentes. As migrations já registradas no banco não são reaplicadas. Se a conexão ou a atualização falhar, a API não termina de iniciar; atualmente não há tentativa adicional implementada para esse passo.
+
+O endpoint de saúde local fica em `http://localhost:5000/health`. Ele retorna `ok` quando a API está atendendo, mas não testa a conexão com o banco a cada chamada.
 
 ## Expor o webhook localmente
 
@@ -70,19 +77,156 @@ info - Exibir ajuda
 
 Consulte [commands.md](commands.md) para formatos e exemplos.
 
-Registre o webhook, substituindo os marcadores pelos valores locais:
+O caminho final precisa ser `/telegram/webhook`. Use o exemplo PowerShell abaixo tanto para o túnel local quanto para o domínio público do Railway. Informe apenas a URL base HTTPS, sem esse caminho.
 
-```text
-https://api.telegram.org/bot<SEU_TOKEN>/setWebhook?url=https://<SUA_URL_PUBLICA>/telegram/webhook
+Informe o mesmo WebhookSecret configurado na API de destino. O token do bot e o WebhookSecret são credenciais distintas. Na ativação inicial em produção, registre o secret enquanto a versão antiga ainda está em execução, seguindo o roteiro abaixo.
+
+As entradas protegidas evitam inserir credenciais como literais no histórico de comandos ou em URLs no navegador. Execute em uma sessão privada, sem registrar transcrições; os valores existirão em memória durante as chamadas.
+
+```powershell
+$telegramBotToken = [System.Net.NetworkCredential]::new(
+    '', (Read-Host 'Token do bot' -AsSecureString)).Password
+$telegramWebhookSecret = [System.Net.NetworkCredential]::new(
+    '', (Read-Host 'WebhookSecret configurado na API' -AsSecureString)).Password
+$financeBotPublicUrl = (Read-Host 'URL HTTPS publica, sem /telegram/webhook').Trim().TrimEnd('/')
+
+try {
+    if ($telegramWebhookSecret -cnotmatch '\A[A-Za-z0-9_-]{1,256}\z') {
+        throw 'WebhookSecret invalido.'
+    }
+    $webhookParameters = @{
+        url = "$financeBotPublicUrl/telegram/webhook"
+        secret_token = $telegramWebhookSecret
+    }
+
+    $webhookRegistration = Invoke-RestMethod -Method Post `
+        -Uri "https://api.telegram.org/bot$telegramBotToken/setWebhook" `
+        -Body $webhookParameters -ErrorAction Stop
+
+    if (-not $webhookRegistration.ok -or -not $webhookRegistration.result) {
+        throw 'Registro recusado.'
+    }
+
+    $webhookInfo = Invoke-RestMethod -Method Get `
+        -Uri "https://api.telegram.org/bot$telegramBotToken/getWebhookInfo" `
+        -ErrorAction Stop
+
+    if (-not $webhookInfo.ok) {
+        throw 'Consulta recusada.'
+    }
+
+    $webhookInfo.result | Select-Object `
+        url, pending_update_count, last_error_date, last_error_message
+}
+catch {
+    Write-Warning 'Falha ao registrar ou consultar o webhook. Confira URL, credenciais e rede; a excecao bruta pode conter o token.'
+}
+finally {
+    Remove-Variable telegramBotToken, telegramWebhookSecret, webhookParameters `
+        -ErrorAction SilentlyContinue
+}
 ```
 
-O caminho final precisa ser `/telegram/webhook`. Para conferir o registro e a fila de atualizações:
+Confirme que `url` aponta para o ambiente desejado. `pending_update_count` informa a fila; `last_error_date` e `last_error_message` podem se referir a uma falha anterior. Envie `/start` de um chat autorizado e confira a resposta e os logs da API. Para consultar novamente sem alterar o registro, execute apenas a chamada a `getWebhookInfo` com o token disponível na sessão.
 
-```text
-https://api.telegram.org/bot<SEU_TOKEN>/getWebhookInfo
+`getWebhookInfo` não revela o secret registrado. A correspondência é verificada pela entrega de uma mensagem. Um redeploy com a mesma URL e secret não exige novo registro; mudar a URL ou o secret exige atualizar `setWebhook`. O exemplo mantém as atualizações pendentes; `drop_pending_updates=true` as descartaria. [Telegram: setWebhook e getWebhookInfo](https://core.telegram.org/bots/api#setwebhook).
+
+**Um bot tem um webhook ativo.** Registrar um túnel local com o bot de produção direciona as próximas entregas para esse túnel. Prefira um bot separado para desenvolvimento ou restaure explicitamente a URL e, quando utilizado, o secret de produção ao terminar. [Telegram: recebimento de atualizações](https://core.telegram.org/bots/api#getting-updates).
+
+## Configurar o Railway
+
+### Variáveis e publicação
+
+Na primeira ativação da versão que exige o header, siga o roteiro de ativação inicial adiante: aplique as variáveis na versão antiga, registre o secret no Telegram e só então publique a versão estrita. Os passos gerais abaixo também servem para atualizações posteriores.
+
+1. Abra o projeto no Railway e selecione o ambiente e o serviço da **API**.
+2. Em **Variables**, cadastre ou confira as chaves abaixo. Os dois sublinhados representam a hierarquia de configuração do .NET.
+3. Revise as alterações pendentes e a versão que será publicada; aplique o deployment para que as variáveis alteradas tenham efeito. [Railway: variáveis](https://docs.railway.com/variables).
+4. Confira os logs de inicialização e acesse `https://<DOMINIO_PUBLICO>/health`.
+5. Registre o domínio público no Telegram pelo procedimento acima e teste `/start` de um chat autorizado.
+
+| Variável no serviço da API | Uso |
+|---|---|
+| `Telegram__BotToken` | Token obtido com o BotFather, sem o prefixo `bot` |
+| `Telegram__AllowedChatIds__0` | Primeiro chat autorizado |
+| `Telegram__AllowedChatIds__1` | Segundo chat, se necessário; continue os índices para outros |
+| `ConnectionStrings__DefaultConnection` | Conexão PostgreSQL compatível com Npgsql |
+| `Telegram__WebhookSecret` | Secret obrigatório; deve corresponder ao `secret_token` registrado no Telegram |
+
+Preserve a conexão existente se ela já funciona. Um exemplo de formato Npgsql é `Host=<HOST>;Port=<PORTA>;Database=<BANCO>;Username=<USUARIO>;Password=<SENHA>`. Não substitua automaticamente essa configuração por uma URL de conexão de outro formato.
+
+O Dockerfile atual faz a API escutar na porta **8080**; confira se o domínio do serviço encaminha para essa porta. O healthcheck definido em `railway.toml` usa `/health`. Não é necessário registrar o webhook novamente a cada publicação da API se a URL continuar igual.
+
+### Ativação inicial de WebhookSecret
+
+A API exige `Telegram:WebhookSecret` e verifica o header `X-Telegram-Bot-Api-Secret-Token` antes de executar comandos ou enviar respostas. Header ausente, incorreto ou com múltiplos valores recebe HTTP 401, sem operação financeira ou envio. Updates autenticados ignorados e chats não autorizados recebem HTTP 200 sem operação ou envio. Este roteiro é operacional e deve ser executado ao publicar a versão; não foi executado durante a implementação.
+
+Escolha um secret próprio aleatório e guarde-o no gerenciador de segredos. A lista de chats autorizados continua independente da autenticação. O parâmetro `secret_token` aceita de 1 a 256 caracteres, usando apenas `A-Z`, `a-z`, `0-9`, `_` e `-`. [Telegram: secret_token](https://core.telegram.org/bots/api#setwebhook).
+
+#### Gerar e guardar o secret
+
+O WebhookSecret é criado por você; não é um novo token fornecido pelo BotFather. Em uma sessão PowerShell privada, gere 32 bytes aleatórios e converta-os em 64 caracteres hexadecimais, compatíveis com o Telegram:
+
+```powershell
+$webhookSecretBytes = New-Object byte[] 32
+$webhookSecretGenerator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try {
+    $webhookSecretGenerator.GetBytes($webhookSecretBytes)
+    $webhookSecret = -join ($webhookSecretBytes | ForEach-Object { $_.ToString('x2') })
+}
+finally {
+    $webhookSecretGenerator.Dispose()
+}
+Set-Clipboard -Value $webhookSecret
 ```
 
-Envie `/start` ao bot e confira a resposta e os logs da API.
+O comando copia o valor para a área de transferência sem imprimi-lo. Guarde-o no gerenciador de segredos e cole-o na variável `Telegram__WebhookSecret` do serviço da API no Railway. No registro PowerShell do webhook, informe esse mesmo valor na entrada protegida para enviá-lo como `secret_token`. Não gere outro valor entre essas duas etapas. Não compartilhe nem sincronize a área de transferência enquanto ela contiver o secret.
+
+Para usar esse valor também nos User Secrets locais, na mesma sessão:
+
+```powershell
+dotnet user-secrets set "Telegram:WebhookSecret" $webhookSecret --project src/FinanceBot.Api
+```
+
+Prefira um secret diferente para cada bot/ambiente. Ao terminar de guardar e cadastrar o valor, limpe a área de transferência e as variáveis da sessão:
+
+```powershell
+Set-Clipboard -Value ''
+Remove-Variable webhookSecret, webhookSecretBytes, webhookSecretGenerator -ErrorAction SilentlyContinue
+```
+
+Gerar e guardar o valor não ativa a autenticação; a publicação e o registro precisam seguir a ordem abaixo.
+
+#### Publicar a versão com autenticação
+
+Para evitar que a API passe a exigir o header antes de o Telegram enviá-lo:
+
+1. Confirme a URL HTTPS de produção, o ambiente, o serviço da API e a versão em execução.
+2. Cadastre `Telegram__WebhookSecret` e confira token e chats permitidos. Aplique as variáveis **ainda na versão que não exige o header**. Antes de aplicar alterações pendentes, confira se o deployment incluirá também código novo.
+3. Execute o registro PowerShell com a mesma URL de produção e o secret cadastrado. A versão antiga ignora o header adicional enviado pelo Telegram. Confirme sucesso e teste `/start`.
+4. Publique a versão que exige o header, com as variáveis já aplicadas. Acompanhe os logs de inicialização.
+5. Consulte `getWebhookInfo`, compare eventuais erros com o horário da publicação e teste `/start` novamente.
+6. Confira que uma chamada direta ao webhook sem o secret recebe HTTP 401, sem executar comando nem enviar resposta. Esse comportamento também está coberto por testes automatizados.
+
+Se a versão que exige o header já estiver publicada, confira e aplique as opções necessárias e registre no Telegram o mesmo secret para restabelecer as entregas. Preserve a fila de atualizações; o bot ainda não tem proteção contra execução duplicada de um mesmo update.
+
+Para desenvolvimento local, acrescente `Telegram:WebhookSecret` aos User Secrets da API e registre o túnel com esse valor. Exemplo com marcador:
+
+```powershell
+dotnet user-secrets set "Telegram:WebhookSecret" "<WEBHOOK_SECRET>" --project src/FinanceBot.Api
+```
+
+Substitua o marcador apenas na máquina local; não salve credenciais reais no guia, em scripts versionados ou em histórico compartilhado.
+
+### Consultar logs
+
+No Railway, abra o serviço da **API**, selecione o deployment e consulte os logs de execução. **Build Logs** mostram a compilação; os logs do serviço **PostgreSQL** mostram o banco. Para pesquisar serviços e períodos, use **Observability / Log Explorer**. O Railway captura a saída padrão e a saída de erro dos serviços. [Railway: logs](https://docs.railway.com/observability/logs).
+
+Atualmente há logs do ASP.NET Core, do EF Core, de atualizações ignoradas e de falhas ao enviar respostas. Ainda não há o registro explícito de cada comando concluído proposto na refatoração. Ausência de erro não comprova entrega da resposta ao Telegram.
+
+O HttpClient do Telegram tem os loggers automáticos removidos, inclusive em Trace, pois a URI contém o token. Falhas de envio registram etapa, tipo de exceção e status quando disponível, sem URI, mensagem de exceção, corpo bruto, secret ou texto financeiro. Não habilite logs sensíveis do EF. Uma falha de envio após concluir o comando mantém HTTP 200; consulte os dados antes de reenviar comandos financeiros.
+
+Mensagens de inicialização do PostgreSQL, isoladamente, não identificam a causa do reinício. Correlacione os horários com os deployments e eventos do serviço antes de atribuí-las a cold start. A mensagem de que o diretório já contém um banco indica reutilização dos dados existentes.
 
 ## Diagnóstico
 
@@ -90,3 +234,9 @@ Envie `/start` ao bot e confira a resposta e os logs da API.
 - **Webhook retorna 502 ou 503:** confirme que a API está rodando na porta 5000, que o túnel aponta para essa porta e que a URL registrada ainda está atual.
 - **O bot ignora mensagens:** confira se o chat de origem está incluído em `Telegram:AllowedChatIds` e se o perfil está em `Development`.
 - **Telegram entrega a mesma atualização novamente:** confira `getWebhookInfo` e os logs. O Telegram pode tentar novamente quando não recebe uma confirmação de sucesso a tempo; falhas de roteamento ou persistência também devem ser investigadas.
+- **API não inicia no Railway:** confira as chaves indicadas pela validação, as variáveis no serviço e ambiente corretos, se o deployment das alterações foi aplicado e os logs de conexão/migrations.
+- **HTTP 401 no webhook:** confira se a versão ativa da API e o registro no Telegram usam o mesmo secret e se há um único valor no header. A lista de chats permitidos continua sendo uma verificação separada.
+- **Despesa registrada, mas sem resposta:** confira falhas de `sendMessage` nos logs da API; consulte `/listar` antes de repetir `/compra`, para evitar duplicação.
+- **PostgreSQL responde `57P03`:** confira os logs do banco para identificar quando terminou a inicialização/recuperação e se a API iniciou novamente depois disso. O código atual não implementa retry de migrations no startup.
+
+Ao compartilhar diagnóstico, remova tokens, secrets, strings de conexão e dados pessoais. Exceções de chamadas ao Telegram podem conter o token na URL.

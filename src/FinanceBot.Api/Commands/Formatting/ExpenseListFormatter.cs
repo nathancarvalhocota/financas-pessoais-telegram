@@ -1,9 +1,9 @@
 using System.Text;
-using FinanceBot.Application.Commands.Parsing;
+using FinanceBot.Api.Commands.Parsing;
 using FinanceBot.Domain.Categories;
 using FinanceBot.Domain.Expenses;
 
-namespace FinanceBot.Application.Commands.Formatting;
+namespace FinanceBot.Api.Commands.Formatting;
 
 internal static class ExpenseListFormatter
 {
