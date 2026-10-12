@@ -7,19 +7,23 @@ internal static class DateTimeConverter
     private static readonly TimeZoneInfo SaoPauloTimeZone =
         TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
 
-    public static (DateTime PeriodStartUtc, DateTime PeriodEndUtc) GetUtcPeriod(DateOnly businessDate)
+    public static (DateTime PeriodStartUtc, DateTime PeriodEndExclusiveUtc) GetUtcPeriod(DateOnly businessDate)
     {
         return GetUtcPeriod(BillingCycle.GetBillingCycle(businessDate));
     }
 
-    public static (DateTime PeriodStartUtc, DateTime PeriodEndUtc) GetUtcPeriod(BillingCycle cycle)
+    public static (DateTime PeriodStartUtc, DateTime PeriodEndExclusiveUtc) GetUtcPeriod(BillingCycle cycle)
     {
-        DateTime start = cycle.StartDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-        DateTime end = cycle.EndDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        return GetUtcPeriod(cycle.StartDate, cycle.EndDate);
+    }
 
+    public static (DateTime PeriodStartUtc, DateTime PeriodEndExclusiveUtc) GetUtcPeriod(
+        DateOnly startDate,
+        DateOnly endDateInclusive)
+    {
         return (
-            TimeZoneInfo.ConvertTimeToUtc(start, SaoPauloTimeZone),
-            TimeZoneInfo.ConvertTimeToUtc(end, SaoPauloTimeZone));
+            GetUtcDate(startDate),
+            GetUtcDate(endDateInclusive.AddDays(1)));
     }
 
     public static DateOnly GetBusinessDate(DateTime dateUtc)

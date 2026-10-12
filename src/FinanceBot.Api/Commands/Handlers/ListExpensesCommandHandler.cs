@@ -41,7 +41,7 @@ public sealed class ListExpensesCommandHandler
         ExpenseListQuery query = parseResult.Query!;
         IReadOnlyList<Compra> expenses = await _expenseRepository.ListByPeriodAsync(
             query.PeriodStartUtc,
-            query.PeriodEndUtc.AddDays(1),
+            query.PeriodEndExclusiveUtc,
             cancellationToken);
 
         return ExpenseListFormatter.Format(query, expenses);

@@ -1,6 +1,7 @@
 using FinanceBot.Domain.Expenses;
 using FinanceBot.Domain.CategoryLimits;
 using FinanceBot.Api.Commands;
+using FinanceBot.Api.Commands.Handlers;
 using FinanceBot.Domain.Categories;
 using Xunit;
 
@@ -467,9 +468,126 @@ public sealed class TelegramCommandRouterTests
         Assert.Contains("Uber mes", response);
     }
 
+    [Theory]
+    [InlineData("/listar 16/02/2019 - 16/02/2019", "2019-02-16T02:00:00Z", "2019-02-17T03:00:00Z", "16/02/2019 a 16/02/2019")]
+    [InlineData("/listar 28/02/2024 - 29/02/2024", "2024-02-28T03:00:00Z", "2024-03-01T03:00:00Z", "28/02/2024 a 29/02/2024")]
+    [InlineData("/listar 31/12/2025 - 01/01/2026", "2025-12-31T03:00:00Z", "2026-01-02T03:00:00Z", "31/12/2025 a 01/01/2026")]
+    public async Task RouteAsync_ListDateRange_QueriesCompleteCalendarDaysAndPreservesOrder(
+        string command, string startText, string endExclusiveText, string description)
+    {
+        DateTime startUtc = DateTimeOffset.Parse(startText).UtcDateTime;
+        DateTime endExclusiveUtc = DateTimeOffset.Parse(endExclusiveText).UtcDateTime;
+        InMemoryCompraRepository repository = new InMemoryCompraRepository();
+        await SeedPeriodBoundariesAsync(repository, startUtc, endExclusiveUtc);
+        TelegramCommandRouter router = new TelegramCommandRouter(repository, new InMemoryLimiteCategoriaRepository());
+
+        string response = await router.RouteMessageAsync(command, AbrilDeVinteSeis, CancellationToken.None);
+
+        Assert.Equal((startUtc, endExclusiveUtc), Assert.Single(repository.QueriedPeriods));
+        Assert.Contains($"Compras de {description}:", response);
+        Assert.Contains("Inicio incluido", response);
+        Assert.Contains("Ultimo instante", response);
+        Assert.DoesNotContain("Antes do inicio", response);
+        Assert.DoesNotContain("Fim excluido", response);
+        Assert.Contains("Total: R$ 30,00", response);
+        Assert.True(response.IndexOf("Ultimo instante", StringComparison.Ordinal) < response.IndexOf("Inicio incluido", StringComparison.Ordinal));
+        Assert.Contains($"Ultimo instante · {endExclusiveUtc.AddTicks(-1):dd/MM HH:mm}", response);
+    }
+
+    [Theory]
+    [InlineData("2026-01-15T02:59:59Z", "2025-12-15T03:00:00Z", "2026-01-15T03:00:00Z", "15/12 a 14/01")]
+    [InlineData("2026-01-15T03:00:00Z", "2026-01-15T03:00:00Z", "2026-02-15T03:00:00Z", "15/01 a 14/02")]
+    [InlineData("2019-02-17T03:00:00Z", "2019-02-15T02:00:00Z", "2019-03-15T03:00:00Z", "15/02 a 14/03")]
+    public async Task RouteAsync_ListWithoutDates_UsesMessageBusinessDateAndExclusiveNextCycle(
+        string messageDateText, string startText, string endExclusiveText, string description)
+    {
+        DateTime startUtc = DateTimeOffset.Parse(startText).UtcDateTime;
+        DateTime endExclusiveUtc = DateTimeOffset.Parse(endExclusiveText).UtcDateTime;
+        InMemoryCompraRepository repository = new InMemoryCompraRepository();
+        await SeedPeriodBoundariesAsync(repository, startUtc, endExclusiveUtc);
+        TelegramCommandRouter router = new TelegramCommandRouter(repository, new InMemoryLimiteCategoriaRepository());
+
+        string response = await router.RouteMessageAsync("/listar", DateTimeOffset.Parse(messageDateText), CancellationToken.None);
+
+        Assert.Equal((startUtc, endExclusiveUtc), Assert.Single(repository.QueriedPeriods));
+        Assert.Contains($"Compras de {description}:", response);
+        Assert.Contains("Total: R$ 30,00", response);
+        Assert.DoesNotContain("Antes do inicio", response);
+        Assert.DoesNotContain("Fim excluido", response);
+    }
+
+    [Fact]
+    public async Task RouteAsync_Register_UsesMessageCycleForLimitAndPreviousCycleAlert()
+    {
+        DateTime startUtc = new DateTime(2019, 2, 15, 2, 0, 0, DateTimeKind.Utc);
+        DateTime endExclusiveUtc = new DateTime(2019, 3, 15, 3, 0, 0, DateTimeKind.Utc);
+        DateTime previousStartUtc = new DateTime(2019, 1, 15, 2, 0, 0, DateTimeKind.Utc);
+        DateTimeOffset messageDate = new DateTimeOffset(2019, 2, 17, 3, 0, 0, TimeSpan.Zero);
+        InMemoryCompraRepository repository = new InMemoryCompraRepository();
+        await repository.AddAsync(new Compra { Valor = 10, Descricao = "Inicio atual", Categoria = Categoria.Mercado, Data = startUtc }, CancellationToken.None);
+        await repository.AddAsync(new Compra { Valor = 20, Descricao = "Fim atual", Categoria = Categoria.Mercado, Data = endExclusiveUtc.AddTicks(-1) }, CancellationToken.None);
+        await repository.AddAsync(new Compra { Valor = 999, Descricao = "Proximo ciclo", Categoria = Categoria.Mercado, Data = endExclusiveUtc }, CancellationToken.None);
+        await repository.AddAsync(new Compra { Valor = 40, Descricao = "Inicio anterior", Categoria = Categoria.Mercado, Data = previousStartUtc }, CancellationToken.None);
+        await repository.AddAsync(new Compra { Valor = 60, Descricao = "Fim anterior", Categoria = Categoria.Mercado, Data = startUtc.AddTicks(-1) }, CancellationToken.None);
+        await repository.AddAsync(new Compra { Valor = 999, Descricao = "Antes do ciclo anterior", Categoria = Categoria.Mercado, Data = previousStartUtc.AddTicks(-1) }, CancellationToken.None);
+        InMemoryLimiteCategoriaRepository limits = new InMemoryLimiteCategoriaRepository();
+        await limits.UpsertAsync(new LimiteCategoria { Categoria = Categoria.Mercado, Valor = 1000 }, CancellationToken.None);
+        TelegramCommandRouter router = new TelegramCommandRouter(repository, limits);
+
+        string response = await router.RouteMessageAsync("/compra 100, Nova compra, Mercado", messageDate, CancellationToken.None);
+
+        Assert.Contains("Mercado: R$ 130,00 de R$ 1.000,00 (13%)", response);
+        Assert.Contains("ALERTA AMARELO", response);
+        Assert.Contains("Ciclo atual (15/02/2019 a 14/03/2019): R$ 130,00", response);
+        Assert.Contains("Ciclo anterior (15/01/2019 a 14/02/2019): R$ 100,00", response);
+        Assert.Contains("Gasto atual: 130% do ciclo anterior (+R$ 30,00).", response);
+        Assert.Equal(new[] { (startUtc, endExclusiveUtc), (startUtc, endExclusiveUtc), (previousStartUtc, startUtc) }, repository.QueriedPeriods);
+        Compra saved = Assert.Single(repository.Compras, compra => compra.Descricao == "Nova compra");
+        Assert.Equal(messageDate.UtcDateTime, saved.Data);
+    }
+
+    [Theory]
+    [InlineData("2026-01-15T02:59:59Z", "2025-12-15T03:00:00Z", "2026-01-15T03:00:00Z")]
+    [InlineData("2026-01-15T03:00:00Z", "2026-01-15T03:00:00Z", "2026-02-15T03:00:00Z")]
+    public async Task RouteAsync_QueryLimit_UsesTimeProviderCycleWithExclusiveEnd(
+        string nowText, string startText, string endExclusiveText)
+    {
+        DateTime startUtc = DateTimeOffset.Parse(startText).UtcDateTime;
+        DateTime endExclusiveUtc = DateTimeOffset.Parse(endExclusiveText).UtcDateTime;
+        InMemoryCompraRepository repository = new InMemoryCompraRepository();
+        await SeedPeriodBoundariesAsync(repository, startUtc, endExclusiveUtc);
+        await repository.AddAsync(new Compra { Valor = 500, Descricao = "Outra categoria", Categoria = Categoria.Uber, Data = startUtc }, CancellationToken.None);
+        InMemoryLimiteCategoriaRepository limits = new InMemoryLimiteCategoriaRepository();
+        await limits.UpsertAsync(new LimiteCategoria { Categoria = Categoria.Mercado, Valor = 100 }, CancellationToken.None);
+        TelegramCommandRouter router = new TelegramCommandRouter(
+            new RegisterExpenseCommandHandler(repository, limits),
+            new ListExpensesCommandHandler(repository),
+            new DeleteExpenseCommandHandler(repository),
+            new CategoryLimitCommandHandler(repository, limits, new FixedTimeProvider(DateTimeOffset.Parse(nowText))));
+
+        string response = await router.RouteMessageAsync("/limite Mercado", AbrilDeVinteSeis, CancellationToken.None);
+
+        Assert.Equal((startUtc, endExclusiveUtc), Assert.Single(repository.QueriedPeriods));
+        Assert.Equal("Mercado: R$ 30,00 de R$ 100,00 (30%)", response);
+    }
+
+    private static async Task SeedPeriodBoundariesAsync(InMemoryCompraRepository repository, DateTime startUtc, DateTime endExclusiveUtc)
+    {
+        await repository.AddAsync(new Compra { Valor = 999, Descricao = "Antes do inicio", Categoria = Categoria.Mercado, Data = startUtc.AddTicks(-1) }, CancellationToken.None);
+        await repository.AddAsync(new Compra { Valor = 10, Descricao = "Inicio incluido", Categoria = Categoria.Mercado, Data = startUtc }, CancellationToken.None);
+        await repository.AddAsync(new Compra { Valor = 20, Descricao = "Ultimo instante", Categoria = Categoria.Mercado, Data = endExclusiveUtc.AddTicks(-1) }, CancellationToken.None);
+        await repository.AddAsync(new Compra { Valor = 999, Descricao = "Fim excluido", Categoria = Categoria.Mercado, Data = endExclusiveUtc }, CancellationToken.None);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
     private sealed class InMemoryCompraRepository : ICompraRepository
     {
-        private List<Compra> Compras { get; } = new List<Compra>();
+        public List<Compra> Compras { get; } = new List<Compra>();
+        public List<(DateTime StartUtc, DateTime EndExclusiveUtc)> QueriedPeriods { get; } = new();
         private int _nextId = 1;
 
         public Task AddAsync(Compra compra, CancellationToken cancellationToken)
@@ -485,11 +603,12 @@ public sealed class TelegramCommandRouterTests
 
         public Task<IReadOnlyList<Compra>> ListByPeriodAsync(
             DateTime periodStartUtc,
-            DateTime periodEndUtc,
+            DateTime periodEndExclusiveUtc,
             CancellationToken cancellationToken)
         {
+            QueriedPeriods.Add((periodStartUtc, periodEndExclusiveUtc));
             IReadOnlyList<Compra> compras = Compras
-                .Where(compra => compra.Data >= periodStartUtc && compra.Data < periodEndUtc)
+                .Where(compra => compra.Data >= periodStartUtc && compra.Data < periodEndExclusiveUtc)
                 .OrderByDescending(compra => compra.Data)
                 .ToList();
             return Task.FromResult(compras);

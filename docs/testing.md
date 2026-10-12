@@ -26,6 +26,8 @@ dotnet build FinanceBot.sln
 
 Os testes de comandos ficam em `FinanceBot.UnitTests/Api/Commands` e instanciam o router e seus handlers com repositórios em memória, sem iniciar um servidor HTTP. Os testes de domínio continuam em `FinanceBot.UnitTests/Domain`.
 
+Os testes de períodos verificam as consultas observáveis dos comandos: início UTC inclusivo, fim UTC exclusivo, último dia completo, viradas de mês/ano e ano bissexto. Um intervalo explícito em fevereiro de 2019 cobre um dia de 25 horas em São Paulo e verifica que o fim é calculado no calendário local antes da conversão. Também cobrem a escolha do ciclo pela data da mensagem em `/compra` e `/listar`, por `TimeProvider` em `/limite`, os totais de limite/alerta, as datas inclusivas das respostas, a ordenação decrescente e a exibição vigente dos instantes. `CompraRepositoryTests` exercita o filtro e a ordenação da implementação real com EF InMemory nas fronteiras do intervalo.
+
 ## Limites dos testes de integração
 
 Os testes de integração substituem o `FinanceBotDbContext` de produção pelo provedor EF Core InMemory. Eles não exercitam PostgreSQL, Npgsql ou migrations. Embora o projeto declare o pacote `Testcontainers.PostgreSql`, os testes atuais não criam um banco PostgreSQL com Testcontainers.

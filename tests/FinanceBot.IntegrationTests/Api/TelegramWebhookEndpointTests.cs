@@ -534,7 +534,7 @@ public sealed class TelegramWebhookEndpointTests
     private sealed class FailingCompraRepository : ICompraRepository
     {
         public Task AddAsync(Compra compra, CancellationToken cancellationToken) => throw new InvalidOperationException("Command persistence failed.");
-        public Task<IReadOnlyList<Compra>> ListByPeriodAsync(DateTime start, DateTime end, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Compra>>([]);
+        public Task<IReadOnlyList<Compra>> ListByPeriodAsync(DateTime periodStartUtc, DateTime periodEndExclusiveUtc, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Compra>>([]);
         public Task<Compra?> FindByIdAsync(int id, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task DeleteAsync(Compra compra, CancellationToken cancellationToken) => throw new NotSupportedException();
     }

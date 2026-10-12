@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using FinanceBot.Api.Commands;
 using FinanceBot.Api.Commands.Formatting;
 using FinanceBot.Domain.Categories;
+using FinanceBot.Domain.Billing;
 
 namespace FinanceBot.Api.Commands.Parsing;
 
@@ -30,7 +31,7 @@ internal sealed record CategoryFilter(CategoryFilterMode Mode, IReadOnlyList<Cat
 
 internal sealed record ExpenseListQuery(
     DateTime PeriodStartUtc,
-    DateTime PeriodEndUtc,
+    DateTime PeriodEndExclusiveUtc,
     string PeriodDescription,
     CategoryFilter CategoryFilter);
 
@@ -90,14 +91,14 @@ internal static class ExpenseListQueryParser
 
     private static ExpenseListQueryParseResult ParseDateRange(Match dateRangeMatch)
     {
-        if (!TryParseDate(dateRangeMatch.Groups["start"].Value, out DateTime rangeStartUtc) ||
-            !TryParseDate(dateRangeMatch.Groups["end"].Value, out DateTime rangeEndUtc))
+        if (!TryParseDate(dateRangeMatch.Groups["start"].Value, out DateOnly rangeStart) ||
+            !TryParseDate(dateRangeMatch.Groups["end"].Value, out DateOnly rangeEnd))
         {
             return ExpenseListQueryParseResult.Failure(
                 "Data invalida. Use DD/MM/AA ou DD/MM/AAAA. Exemplo: /listar 10/02/26 - 20/02/2026");
         }
 
-        if (rangeStartUtc > rangeEndUtc)
+        if (rangeStart > rangeEnd)
         {
             return ExpenseListQueryParseResult.Failure(
                 "Data inicial nao pode ser posterior a data final.");
@@ -110,10 +111,11 @@ internal static class ExpenseListQueryParser
             return ExpenseListQueryParseResult.Failure(filterResult.ErrorMessage!);
         }
 
+        var (periodStartUtc, periodEndExclusiveUtc) = DateTimeConverter.GetUtcPeriod(rangeStart, rangeEnd);
         return ExpenseListQueryParseResult.Success(new ExpenseListQuery(
-            rangeStartUtc,
-            rangeEndUtc,
-            $"{rangeStartUtc:dd/MM/yyyy} a {rangeEndUtc:dd/MM/yyyy}",
+            periodStartUtc,
+            periodEndExclusiveUtc,
+            $"{rangeStart:dd/MM/yyyy} a {rangeEnd:dd/MM/yyyy}",
             filterResult.Filter!));
     }
 
@@ -147,11 +149,12 @@ internal static class ExpenseListQueryParser
             return ExpenseListQueryParseResult.Failure(filterResult.ErrorMessage!);
         }
 
-        var (periodStartUtc, periodEndUtc) = DateTimeConverter.GetUtcPeriod(referenceDate);
+        BillingCycle cycle = BillingCycle.GetBillingCycle(referenceDate);
+        var (periodStartUtc, periodEndExclusiveUtc) = DateTimeConverter.GetUtcPeriod(cycle);
         return ExpenseListQueryParseResult.Success(new ExpenseListQuery(
             periodStartUtc,
-            periodEndUtc,
-            $"{periodStartUtc:dd/MM} a {periodEndUtc:dd/MM}",
+            periodEndExclusiveUtc,
+            $"{cycle.StartDate:dd/MM} a {cycle.EndDate:dd/MM}",
             filterResult.Filter!));
     }
 
@@ -200,9 +203,9 @@ internal static class ExpenseListQueryParser
         return CategoryFilterParseResult.Success(new CategoryFilter(filterMode, categories));
     }
 
-    private static bool TryParseDate(string dateText, out DateTime dateUtc)
+    private static bool TryParseDate(string dateText, out DateOnly localDate)
     {
-        dateUtc = default;
+        localDate = default;
         Match match = DateRegex.Match(dateText);
         if (!match.Success)
         {
@@ -215,11 +218,10 @@ internal static class ExpenseListQueryParser
 
         try
         {
-            DateOnly localDate = new DateOnly(
+            localDate = new DateOnly(
                 year,
                 int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture),
                 int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture));
-            dateUtc = DateTimeConverter.GetUtcDate(localDate);
             return true;
         }
         catch (ArgumentOutOfRangeException)

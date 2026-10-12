@@ -21,12 +21,12 @@ public sealed class CompraRepository : ICompraRepository
 
     public async Task<IReadOnlyList<Compra>> ListByPeriodAsync(
         DateTime periodStartUtc,
-        DateTime periodEndUtc,
+        DateTime periodEndExclusiveUtc,
         CancellationToken cancellationToken)
     {
         List<Compra> compras = await _financeBotDbContext.Compras
             .AsNoTracking()
-            .Where(compra => compra.Data >= periodStartUtc && compra.Data < periodEndUtc)
+            .Where(compra => compra.Data >= periodStartUtc && compra.Data < periodEndExclusiveUtc)
             .OrderByDescending(compra => compra.Data)
             .ToListAsync(cancellationToken);
 

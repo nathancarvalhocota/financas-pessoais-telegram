@@ -86,12 +86,12 @@ public sealed class RegisterExpenseCommandHandler
             return await AppendPaceAlertAsync(response, expense, cancellationToken);
         }
 
-        var (periodStartUtc, periodEndUtc) = DateTimeConverter.GetUtcPeriod(
+        var (periodStartUtc, periodEndExclusiveUtc) = DateTimeConverter.GetUtcPeriod(
             DateTimeConverter.GetBusinessDate(expenseDateUtc));
 
         IReadOnlyList<Compra> cycleExpenses = await _expenseRepository.ListByPeriodAsync(
             periodStartUtc,
-            periodEndUtc.AddDays(1),
+            periodEndExclusiveUtc,
             cancellationToken);
 
         double accumulatedSpending = cycleExpenses
@@ -123,18 +123,18 @@ public sealed class RegisterExpenseCommandHandler
     {
         BillingCycle currentCycle = BillingCycle.GetBillingCycle(
             DateTimeConverter.GetBusinessDate(expense.Data));
-        var (currentStartUtc, currentEndUtc) = DateTimeConverter.GetUtcPeriod(currentCycle);
+        var (currentStartUtc, currentEndExclusiveUtc) = DateTimeConverter.GetUtcPeriod(currentCycle);
 
         BillingCycle previousCycle = BillingCycle.GetBillingCycle(currentCycle.StartDate.AddMonths(-1));
-        var (previousStartUtc, previousEndUtc) = DateTimeConverter.GetUtcPeriod(previousCycle);
+        var (previousStartUtc, previousEndExclusiveUtc) = DateTimeConverter.GetUtcPeriod(previousCycle);
 
         IReadOnlyList<Compra> currentExpenses = await _expenseRepository.ListByPeriodAsync(
             currentStartUtc,
-            currentEndUtc.AddDays(1),
+            currentEndExclusiveUtc,
             cancellationToken);
         IReadOnlyList<Compra> previousExpenses = await _expenseRepository.ListByPeriodAsync(
             previousStartUtc,
-            previousEndUtc.AddDays(1),
+            previousEndExclusiveUtc,
             cancellationToken);
 
         double currentTotal = currentExpenses.Sum(item => item.Valor);
@@ -158,8 +158,8 @@ public sealed class RegisterExpenseCommandHandler
             _ => "⚠️ ALERTA AMARELO: gasto do ciclo acima do anterior"
         });
         alert.AppendLine();
-        alert.AppendLine($"Ciclo atual ({currentStartUtc:dd/MM/yyyy} a {currentEndUtc:dd/MM/yyyy}): R$ {BrazilianCurrencyFormatter.FormatAmount(currentTotal)}");
-        alert.AppendLine($"Ciclo anterior ({previousStartUtc:dd/MM/yyyy} a {previousEndUtc:dd/MM/yyyy}): R$ {BrazilianCurrencyFormatter.FormatAmount(previousTotal)}");
+        alert.AppendLine($"Ciclo atual ({currentCycle.StartDate:dd/MM/yyyy} a {currentCycle.EndDate:dd/MM/yyyy}): R$ {BrazilianCurrencyFormatter.FormatAmount(currentTotal)}");
+        alert.AppendLine($"Ciclo anterior ({previousCycle.StartDate:dd/MM/yyyy} a {previousCycle.EndDate:dd/MM/yyyy}): R$ {BrazilianCurrencyFormatter.FormatAmount(previousTotal)}");
         alert.AppendLine($"Gasto atual: {(int)Math.Round(currentTotal / previousTotal * 100)}% do ciclo anterior ({BrazilianCurrencyFormatter.FormatSignedAmount(currentTotal - previousTotal)}).");
         alert.AppendLine();
         alert.AppendLine("Categorias:");

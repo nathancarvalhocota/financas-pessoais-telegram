@@ -14,7 +14,9 @@ O ciclo começa no dia 15 e termina no dia 14 do mês seguinte. A regra usa a da
 
 Em `/listar MM/YY`, `MM/YY` indica o mês em que o ciclo começa: `/listar 04/26` corresponde a 15/04/2026 até 14/05/2026. Sem período explícito, `/listar` usa a data da mensagem para escolher o ciclo. Em `/limite`, o ciclo atual é calculado a partir do relógio da aplicação.
 
-Filtros com datas explícitas aceitam os dois dias informados. Os limites de data são convertidos do calendário de São Paulo para UTC antes da consulta.
+Filtros com datas explícitas aceitam os dois dias informados. As consultas usam o intervalo UTC `[início, fim exclusivo)`: incluem compras com `Data >= início` e excluem aquelas com `Data >= fim exclusivo`. `DateTimeConverter` calcula o início do dia seguinte ao último dia no calendário de São Paulo e só então converte esse limite para UTC, respeitando mudanças históricas de offset. Não acrescenta um dia depois da conversão UTC.
+
+No ciclo de 15/04 a 14/05, o fim exclusivo da consulta é o início de 15/05 em São Paulo. As datas apresentadas nos cabeçalhos e alertas continuam inclusivas; a ordenação decrescente e o fuso de exibição dos instantes das compras não mudam.
 
 ## Limites por categoria
 

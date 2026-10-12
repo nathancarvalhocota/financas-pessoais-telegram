@@ -109,12 +109,12 @@ public sealed class CategoryLimitCommandHandler
         }
 
         DateTime nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
-        var (periodStartUtc, periodEndUtc) = DateTimeConverter.GetUtcPeriod(
+        var (periodStartUtc, periodEndExclusiveUtc) = DateTimeConverter.GetUtcPeriod(
             DateTimeConverter.GetBusinessDate(nowUtc));
 
         IReadOnlyList<Compra> cycleExpenses = await _expenseRepository.ListByPeriodAsync(
             periodStartUtc,
-            periodEndUtc.AddDays(1),
+            periodEndExclusiveUtc,
             cancellationToken);
 
         double totalSpending = cycleExpenses
