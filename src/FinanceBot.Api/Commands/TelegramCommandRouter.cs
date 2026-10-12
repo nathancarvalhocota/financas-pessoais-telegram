@@ -1,5 +1,6 @@
 using FinanceBot.Api.Commands.Handlers;
 using FinanceBot.Api.Commands.Parsing;
+using FinanceBot.Api.Commands.Formatting;
 using FinanceBot.Domain.Expenses;
 using FinanceBot.Domain.CategoryLimits;
 
@@ -35,7 +36,7 @@ public sealed class TelegramCommandRouter
     {
     }
 
-    public Task<string> RouteMessageAsync(
+    public async Task<string> RouteMessageAsync(
         string messageText,
         DateTimeOffset messageDateUtc,
         CancellationToken cancellationToken)
@@ -44,23 +45,23 @@ public sealed class TelegramCommandRouter
 
         return command.Name switch
         {
-            "/compra" => _registerExpenseCommandHandler.HandleRegisterExpenseAsync(
+            "/compra" => await _registerExpenseCommandHandler.HandleRegisterExpenseAsync(
                 command.Text,
                 messageDateUtc,
                 cancellationToken),
-            "/listar" => _listExpensesCommandHandler.HandleListExpensesAsync(
+            "/listar" => await _listExpensesCommandHandler.HandleListExpensesAsync(
                 command.Text,
                 messageDateUtc,
                 cancellationToken),
-            "/deletar" => _deleteExpenseCommandHandler.HandleDeleteExpenseAsync(
+            "/deletar" => await _deleteExpenseCommandHandler.HandleDeleteExpenseAsync(
                 command.Text,
                 cancellationToken),
-            "/limite" => _categoryLimitCommandHandler.HandleSetCategoryLimitAsync(
+            "/limite" => CategoryLimitFormatter.Format(await _categoryLimitCommandHandler.HandleSetCategoryLimitAsync(
                 command.Text,
-                cancellationToken),
-            "/start" => Task.FromResult(TelegramCommandMessages.Start),
-            "/info" => Task.FromResult(TelegramCommandMessages.Info),
-            _ => Task.FromResult(TelegramCommandMessages.UnknownCommand)
+                cancellationToken)),
+            "/start" => TelegramCommandMessages.Start,
+            "/info" => TelegramCommandMessages.Info,
+            _ => TelegramCommandMessages.UnknownCommand
         };
     }
 }

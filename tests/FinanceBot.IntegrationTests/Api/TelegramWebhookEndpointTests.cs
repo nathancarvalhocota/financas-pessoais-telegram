@@ -23,6 +23,76 @@ namespace FinanceBot.IntegrationTests.Api;
 
 public sealed class TelegramWebhookEndpointTests
 {
+    [Fact]
+    public async Task PostWebhook_CategoryLimitLifecycle_PreservesMessagesPersistenceAndIdentity()
+    {
+        using FinanceBotApiFactory factory = new(998877);
+        using HttpClient client = factory.CreateClient();
+
+        async Task SendAsync(string text, string expected)
+        {
+            using HttpResponseMessage response = await client.PostAsJsonAsync("/telegram/webhook", new TelegramWebhookRequest
+            {
+                Message = new TelegramMessageRequest
+                {
+                    Chat = new TelegramChatRequest { Id = 998877 },
+                    Text = text,
+                    Date = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                }
+            });
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(expected, factory.RecordingTelegramMessageHandler.SentMessages.Last().Text);
+        }
+
+        await SendAsync("/limite Mercado", "Nenhum limite definido para Mercado.");
+        await SendAsync("/limite Mercado 800,25", "Limite de Mercado definido: R$ 800,25");
+        int id;
+        using (IServiceScope scope = factory.Services.CreateScope())
+        {
+            var limit = Assert.Single(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().LimiteCategorias);
+            id = limit.Id;
+            Assert.Equal(800.25, limit.Valor);
+        }
+
+        await SendAsync("/limite Mercado 100", "Limite de Mercado definido: R$ 100,00");
+        await SendAsync("/compra 100, Teste limite, Mercado", "Compra registrada: R$ 100,00 - Mercado\nMercado: R$ 100,00 de R$ 100,00 (100%)");
+        await SendAsync("/limite Mercado", "Mercado: R$ 100,00 de R$ 100,00 (100%)");
+        await SendAsync("/limite Mercado " + new string('9', 400), "Valor invalido. Use um numero positivo ou 0 para remover o limite.");
+        using (IServiceScope scope = factory.Services.CreateScope())
+        {
+            var limit = Assert.Single(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().LimiteCategorias);
+            Assert.Equal(id, limit.Id);
+            Assert.Equal(100, limit.Valor);
+        }
+
+        await SendAsync("/limite Mercado 0", "Limite de Mercado removido");
+        await SendAsync("/limite Mercado 0", "Limite de Mercado removido");
+        await SendAsync("/limite Mercado", "Nenhum limite definido para Mercado.");
+        using IServiceScope verify = factory.Services.CreateScope();
+        Assert.Empty(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().LimiteCategorias);
+    }
+
+    [Fact]
+    public async Task PostWebhook_InvalidLimitSyntax_PrecedesCategoryErrorAndDoesNotPersist()
+    {
+        using FinanceBotApiFactory factory = new(998877);
+        using HttpClient client = factory.CreateClient();
+        using HttpResponseMessage response = await client.PostAsJsonAsync("/telegram/webhook", new TelegramWebhookRequest
+        {
+            Message = new TelegramMessageRequest
+            {
+                Chat = new TelegramChatRequest { Id = 998877 },
+                Text = "/limite Inexistente -1"
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Uso correto: /limite <CATEGORIA> <VALOR>. Exemplo: /limite Mercado 800\nPara consultar: /limite <CATEGORIA>. Exemplo: /limite Mercado",
+            Assert.Single(factory.RecordingTelegramMessageHandler.SentMessages).Text);
+        using IServiceScope scope = factory.Services.CreateScope();
+        Assert.Empty(scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>().LimiteCategorias);
+    }
+
     [Theory]
     [InlineData("missing")]
     [InlineData("incorrect")]

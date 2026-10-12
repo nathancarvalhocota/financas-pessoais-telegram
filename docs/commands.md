@@ -76,6 +76,8 @@ Exemplos:
 
 Um valor maior que zero define ou atualiza o limite. O valor `0` remove o limite. A consulta mostra o total gasto no ciclo atual e o percentual utilizado. Após registrar uma compra, o progresso do limite é incluído na resposta quando existe um limite para aquela categoria.
 
+O valor usa a mesma sintaxe de até duas casas decimais, com vírgula ou ponto. Valores não finitos não são aceitos. Quando não há limite, a consulta informa essa ausência; remover um limite já ausente também confirma a remoção. Atingir exatamente o limite representa 100% sem ultrapassagem. O ciclo de `/limite` é escolhido pelo relógio da aplicação, no fuso de São Paulo, independentemente da data da mensagem.
+
 ## `/start` e `/info`
 
 `/start` envia uma mensagem inicial. `/info` apresenta a ajuda dos comandos implementados pelo bot.

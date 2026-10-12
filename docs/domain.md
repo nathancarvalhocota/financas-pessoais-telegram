@@ -22,7 +22,11 @@ No ciclo de 15/04 a 14/05, o fim exclusivo da consulta é o início de 15/05 em 
 
 Há no máximo um limite por categoria. Um valor positivo define ou atualiza o limite; `0` remove o existente. A consulta e o progresso após uma compra usam os gastos daquela categoria no ciclo corrente.
 
+`LimiteCategoria.Criar` exige categoria definida no enum e valor positivo e finito; zero, negativos, `NaN` e infinitos retornam erro tipado de domínio. A entidade não tem construtor nem setters públicos. `AlterarValor` valida categoria e novo valor antes de alterar e retorna erro tipado em caso de falha, preservando o estado anterior. Materializar um registro legado não limpa ou transforma seus dados. O handler interpreta zero como remoção, sem criar uma entidade com esse valor; remover um limite inexistente preserva a confirmação. Ausência de limite em uma consulta é um estado normal.
+
 O limite é ultrapassado quando o total gasto é maior que o limite. Atingir exatamente o valor definido ainda não conta como ultrapassagem.
+
+`AvaliarProgresso(totalGasto)` é uma avaliação pura sobre o total fornecido, sem acesso a repositórios. Retorna categoria, limite, gasto, percentual inteiro e indicação de ultrapassagem. O percentual mantém `Math.Round(totalGasto / limite * 100)` com arredondamento de empate para o par. `/limite` e o registro de compra usam essa avaliação.
 
 ## Alertas de gasto
 

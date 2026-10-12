@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using FinanceBot.Api.Commands;
-using FinanceBot.Api.Commands.Formatting;
+using FinanceBot.Api.Commands.Results;
 using FinanceBot.Domain.Expenses;
 using FinanceBot.Domain.CategoryLimits;
 using FinanceBot.Domain.Categories;
@@ -32,7 +32,7 @@ public sealed class CategoryLimitCommandHandler
         _timeProvider = timeProvider;
     }
 
-    public async Task<string> HandleSetCategoryLimitAsync(string messageText, CancellationToken cancellationToken)
+    public async Task<CategoryLimitResult> HandleSetCategoryLimitAsync(string messageText, CancellationToken cancellationToken)
     {
         Match getLimitMatch = GetCategoryLimitCommandRegex.Match(messageText);
         if (getLimitMatch.Success && !SetCategoryLimitCommandRegex.IsMatch(messageText))
@@ -43,8 +43,7 @@ public sealed class CategoryLimitCommandHandler
         Match setLimitMatch = SetCategoryLimitCommandRegex.Match(messageText);
         if (!setLimitMatch.Success)
         {
-            return "Uso correto: /limite <CATEGORIA> <VALOR>. Exemplo: /limite Mercado 800\n" +
-                "Para consultar: /limite <CATEGORIA>. Exemplo: /limite Mercado";
+            return new CategoryLimitResult.Failure(new CategoryLimitError.InvalidSyntax());
         }
 
         string categoryText = setLimitMatch.Groups[1].Value.Trim();
@@ -52,7 +51,7 @@ public sealed class CategoryLimitCommandHandler
 
         if (!CategoryCatalog.TryParse(categoryText, out Categoria category))
         {
-            return CategoryCommandMessages.InvalidCategory(categoryText);
+            return new CategoryLimitResult.Failure(new CategoryLimitError.UnknownCategory(categoryText));
         }
 
         bool parsedValue = double.TryParse(
@@ -61,12 +60,10 @@ public sealed class CategoryLimitCommandHandler
             CultureInfo.InvariantCulture,
             out double value);
 
-        if (!parsedValue || value < 0)
+        if (!parsedValue)
         {
-            return "Valor invalido. Use um numero positivo ou 0 para remover o limite.";
+            return new CategoryLimitResult.Failure(new CategoryLimitError.InvalidLimit());
         }
-
-        string categoryDisplayName = CategoryCatalog.GetDisplayName(category);
 
         if (value == 0)
         {
@@ -78,34 +75,40 @@ public sealed class CategoryLimitCommandHandler
                 await _categoryLimitRepository.DeleteAsync(existingLimit, cancellationToken);
             }
 
-            return $"Limite de {categoryDisplayName} removido";
+            return new CategoryLimitResult.Removed(category);
         }
 
-        LimiteCategoria categoryLimit = new LimiteCategoria
+        LimiteCategoriaCreationResult creation = LimiteCategoria.Criar(category, value);
+        if (creation is LimiteCategoriaCreationResult.Failure failure)
         {
-            Categoria = category,
-            Valor = value
-        };
+            CategoryLimitError error = failure.Error switch
+            {
+                LimiteCategoriaError.InvalidCategory => new CategoryLimitError.UnknownCategory(categoryText),
+                LimiteCategoriaError.InvalidValue => new CategoryLimitError.InvalidLimit(),
+                _ => throw new ArgumentOutOfRangeException(nameof(failure.Error))
+            };
+            return new CategoryLimitResult.Failure(error);
+        }
 
+        LimiteCategoria categoryLimit = ((LimiteCategoriaCreationResult.Success)creation).Limite;
         await _categoryLimitRepository.UpsertAsync(categoryLimit, cancellationToken);
-        return $"Limite de {categoryDisplayName} definido: R$ {BrazilianCurrencyFormatter.FormatAmount(value)}";
+        return new CategoryLimitResult.Updated(category, categoryLimit.Valor);
     }
 
-    private async Task<string> HandleGetAsync(Match getLimitMatch, CancellationToken cancellationToken)
+    private async Task<CategoryLimitResult> HandleGetAsync(Match getLimitMatch, CancellationToken cancellationToken)
     {
         string categoryText = getLimitMatch.Groups[1].Value.Trim();
         if (!CategoryCatalog.TryParse(categoryText, out Categoria category))
         {
-            return CategoryCommandMessages.InvalidCategory(categoryText);
+            return new CategoryLimitResult.Failure(new CategoryLimitError.UnknownCategory(categoryText));
         }
 
-        string categoryDisplayName = CategoryCatalog.GetDisplayName(category);
         LimiteCategoria? categoryLimit = await _categoryLimitRepository
             .GetByCategoryAsync(category, cancellationToken);
 
         if (categoryLimit is null)
         {
-            return $"Nenhum limite definido para {categoryDisplayName}.";
+            return new CategoryLimitResult.Queried(category, null);
         }
 
         DateTime nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
@@ -121,7 +124,6 @@ public sealed class CategoryLimitCommandHandler
             .Where(expense => expense.Categoria == category)
             .Sum(expense => expense.Valor);
 
-        int percentage = categoryLimit.CalculateUsagePercentage(totalSpending);
-        return $"{categoryDisplayName}: R$ {BrazilianCurrencyFormatter.FormatAmount(totalSpending)} de R$ {BrazilianCurrencyFormatter.FormatAmount(categoryLimit.Valor)} ({percentage}%)";
+        return new CategoryLimitResult.Queried(category, categoryLimit.AvaliarProgresso(totalSpending));
     }
 }

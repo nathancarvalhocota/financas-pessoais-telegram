@@ -36,7 +36,11 @@ public sealed class LimiteCategoriaRepository : ILimiteCategoriaRepository
         }
         else
         {
-            existing.Valor = limiteCategoria.Valor;
+            LimiteCategoriaError? error = existing.AlterarValor(limiteCategoria.Valor);
+            if (error is not null)
+            {
+                throw new InvalidOperationException($"Invalid category limit update: {error}.");
+            }
         }
 
         await _financeBotDbContext.SaveChangesAsync(cancellationToken);

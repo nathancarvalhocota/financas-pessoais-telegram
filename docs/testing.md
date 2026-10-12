@@ -26,6 +26,10 @@ dotnet build FinanceBot.sln
 
 Os testes de comandos ficam em `FinanceBot.UnitTests/Api/Commands` e instanciam o router e seus handlers com repositórios em memória, sem iniciar um servidor HTTP. Os testes de domínio continuam em `FinanceBot.UnitTests/Domain`.
 
+Os testes de `/limite` verificam as variantes e erros de `CategoryLimitResult`, consulta sem limite, definição/atualização, remoção com zero inclusive sem registro existente e precedência entre sintaxe, categoria e valor. A entidade é testada contra criação/alteração inválidas, preservação de estado e progresso com arredondamento e igualdade ao limite. As comparações de mensagens ficam no formatter, nos testes legados do router e em cenários selecionados do webhook; o fluxo HTTP cobre consulta, definição, atualização, progresso, valor inválido e remoção.
+
+`LimiteCategoriaRepositoryTests` verifica inserção, materialização em contextos distintos, atualização preservando ID/categoria e exclusão com EF InMemory. Um registro legado com categoria inválida verifica que a materialização preserva os dados e que a alteração controlada recusa o estado inválido. Um teste de metadados com Npgsql, sem conexão ao banco, confere tabela, colunas, chave gerada, categoria textual, índice único e `double precision`. Isso verifica a configuração do modelo, sem executar PostgreSQL ou migrations.
+
 Os testes de períodos verificam as consultas observáveis dos comandos: início UTC inclusivo, fim UTC exclusivo, último dia completo, viradas de mês/ano e ano bissexto. Um intervalo explícito em fevereiro de 2019 cobre um dia de 25 horas em São Paulo e verifica que o fim é calculado no calendário local antes da conversão. Também cobrem a escolha do ciclo pela data da mensagem em `/compra` e `/listar`, por `TimeProvider` em `/limite`, os totais de limite/alerta, as datas inclusivas das respostas, a ordenação decrescente e a exibição vigente dos instantes. `CompraRepositoryTests` exercita o filtro e a ordenação da implementação real com EF InMemory nas fronteiras do intervalo.
 
 ## Limites dos testes de integração

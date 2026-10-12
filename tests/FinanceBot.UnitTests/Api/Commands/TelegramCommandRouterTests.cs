@@ -531,7 +531,7 @@ public sealed class TelegramCommandRouterTests
         await repository.AddAsync(new Compra { Valor = 60, Descricao = "Fim anterior", Categoria = Categoria.Mercado, Data = startUtc.AddTicks(-1) }, CancellationToken.None);
         await repository.AddAsync(new Compra { Valor = 999, Descricao = "Antes do ciclo anterior", Categoria = Categoria.Mercado, Data = previousStartUtc.AddTicks(-1) }, CancellationToken.None);
         InMemoryLimiteCategoriaRepository limits = new InMemoryLimiteCategoriaRepository();
-        await limits.UpsertAsync(new LimiteCategoria { Categoria = Categoria.Mercado, Valor = 1000 }, CancellationToken.None);
+        await limits.UpsertAsync(Assert.IsType<LimiteCategoriaCreationResult.Success>(LimiteCategoria.Criar(Categoria.Mercado, 1000)).Limite, CancellationToken.None);
         TelegramCommandRouter router = new TelegramCommandRouter(repository, limits);
 
         string response = await router.RouteMessageAsync("/compra 100, Nova compra, Mercado", messageDate, CancellationToken.None);
@@ -558,7 +558,7 @@ public sealed class TelegramCommandRouterTests
         await SeedPeriodBoundariesAsync(repository, startUtc, endExclusiveUtc);
         await repository.AddAsync(new Compra { Valor = 500, Descricao = "Outra categoria", Categoria = Categoria.Uber, Data = startUtc }, CancellationToken.None);
         InMemoryLimiteCategoriaRepository limits = new InMemoryLimiteCategoriaRepository();
-        await limits.UpsertAsync(new LimiteCategoria { Categoria = Categoria.Mercado, Valor = 100 }, CancellationToken.None);
+        await limits.UpsertAsync(Assert.IsType<LimiteCategoriaCreationResult.Success>(LimiteCategoria.Criar(Categoria.Mercado, 100)).Limite, CancellationToken.None);
         TelegramCommandRouter router = new TelegramCommandRouter(
             new RegisterExpenseCommandHandler(repository, limits),
             new ListExpensesCommandHandler(repository),
@@ -630,8 +630,6 @@ public sealed class TelegramCommandRouterTests
     private sealed class InMemoryLimiteCategoriaRepository : ILimiteCategoriaRepository
     {
         private readonly List<LimiteCategoria> _limites = new List<LimiteCategoria>();
-        private int _nextId = 1;
-
         public Task<LimiteCategoria?> GetByCategoryAsync(
             Categoria categoria,
             CancellationToken cancellationToken)
@@ -647,12 +645,11 @@ public sealed class TelegramCommandRouterTests
             LimiteCategoria? existing = _limites.FirstOrDefault(l => l.Categoria == limiteCategoria.Categoria);
             if (existing is null)
             {
-                limiteCategoria.Id = _nextId++;
                 _limites.Add(limiteCategoria);
             }
             else
             {
-                existing.Valor = limiteCategoria.Valor;
+                Assert.Null(existing.AlterarValor(limiteCategoria.Valor));
             }
 
             return Task.CompletedTask;

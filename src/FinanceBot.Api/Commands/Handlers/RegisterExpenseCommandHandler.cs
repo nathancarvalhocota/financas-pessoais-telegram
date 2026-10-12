@@ -101,7 +101,8 @@ public sealed class RegisterExpenseCommandHandler
         string formattedSpending = BrazilianCurrencyFormatter.FormatAmount(accumulatedSpending);
         string formattedLimit = BrazilianCurrencyFormatter.FormatAmount(categoryLimit.Valor);
 
-        if (categoryLimit.IsExceededBy(accumulatedSpending))
+        CategoryLimitProgress progress = categoryLimit.AvaliarProgresso(accumulatedSpending);
+        if (progress.Excedido)
         {
             return await AppendPaceAlertAsync(
                 $"{response}\n⚠ Limite de {categoryDisplayName} ultrapassado: R$ {formattedSpending} de R$ {formattedLimit}",
@@ -109,7 +110,7 @@ public sealed class RegisterExpenseCommandHandler
                 cancellationToken);
         }
 
-        int percentage = categoryLimit.CalculateUsagePercentage(accumulatedSpending);
+        int percentage = progress.Percentual;
         return await AppendPaceAlertAsync(
             $"{response}\n{categoryDisplayName}: R$ {formattedSpending} de R$ {formattedLimit} ({percentage}%)",
             expense,
