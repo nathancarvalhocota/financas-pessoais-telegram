@@ -53,9 +53,9 @@ public sealed class TelegramCommandRouter
                 command.Text,
                 messageDateUtc,
                 cancellationToken),
-            "/deletar" => await _deleteExpenseCommandHandler.HandleDeleteExpenseAsync(
+            "/deletar" => DeleteExpenseFormatter.Format(await _deleteExpenseCommandHandler.HandleDeleteExpenseAsync(
                 command.Text,
-                cancellationToken),
+                cancellationToken)),
             "/limite" => CategoryLimitFormatter.Format(await _categoryLimitCommandHandler.HandleSetCategoryLimitAsync(
                 command.Text,
                 cancellationToken)),

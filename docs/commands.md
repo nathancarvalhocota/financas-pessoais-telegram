@@ -50,7 +50,7 @@ Exemplo:
 /deletar 42
 ```
 
-O bot confirma os dados da compra removida ou informa quando o ID não foi encontrado.
+O bot confirma os dados da compra removida ou informa quando o ID não foi encontrado. O ID deve ser um inteiro positivo representável em 32 bits (até `2147483647`); zeros iniciais são aceitos. A validação verifica sintaxe antes do valor do ID: números negativos, sinal `+`, casas decimais ou argumentos adicionais recebem a orientação de uso; zero e números acima do intervalo recebem a mensagem de ID inválido, sem consulta ou exclusão. Um ID válido inexistente não remove outras compras. O comando aceita maiúsculas e espaços entre comando e ID, mas a menção `/deletar@FinanceBot` continua recebendo a orientação de uso.
 
 ## `/limite` — consultar ou definir limite por categoria
 

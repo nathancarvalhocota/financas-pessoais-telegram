@@ -1,7 +1,6 @@
 using System.Text.RegularExpressions;
-using FinanceBot.Api.Commands.Formatting;
+using FinanceBot.Api.Commands.Results;
 using FinanceBot.Domain.Expenses;
-using FinanceBot.Domain.Categories;
 
 namespace FinanceBot.Api.Commands.Handlers;
 
@@ -18,29 +17,28 @@ public sealed class DeleteExpenseCommandHandler
         _expenseRepository = expenseRepository;
     }
 
-    public async Task<string> HandleDeleteExpenseAsync(string messageText, CancellationToken cancellationToken)
+    public async Task<DeleteExpenseResult> HandleDeleteExpenseAsync(string messageText, CancellationToken cancellationToken)
     {
         Match commandMatch = DeleteExpenseCommandRegex.Match(messageText);
         if (!commandMatch.Success)
         {
-            return "Uso correto: /deletar <ID>. Exemplo: /deletar 42";
+            return new DeleteExpenseResult.Failure(new DeleteExpenseError.InvalidSyntax());
         }
 
         bool parsedId = int.TryParse(commandMatch.Groups[1].Value, out int expenseId);
         if (!parsedId || expenseId <= 0)
         {
-            return "ID invalido para o comando /deletar.";
+            return new DeleteExpenseResult.Failure(new DeleteExpenseError.InvalidId());
         }
 
         Compra? expense = await _expenseRepository.FindByIdAsync(expenseId, cancellationToken);
         if (expense is null)
         {
-            return "ID nao encontrado. Nada foi removido.";
+            return new DeleteExpenseResult.NotFound(expenseId);
         }
 
         await _expenseRepository.DeleteAsync(expense, cancellationToken);
 
-        string categoryDisplayName = CategoryCatalog.GetDisplayName(expense.Categoria);
-        return $"Compra removida: R$ {BrazilianCurrencyFormatter.FormatAmount(expense.Valor)} - {expense.Descricao} ({categoryDisplayName})";
+        return new DeleteExpenseResult.Success(ExpenseItem.From(expense));
     }
 }

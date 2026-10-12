@@ -424,15 +424,18 @@ public sealed class TelegramWebhookEndpointTests
         using FinanceBotApiFactory financeBotApiFactory = new FinanceBotApiFactory(998877);
         HttpClient httpClient = financeBotApiFactory.CreateClient();
         int compraId;
+        int otherId;
 
         using (IServiceScope serviceScope = financeBotApiFactory.Services.CreateScope())
         {
             FinanceBotDbContext financeBotDbContext = serviceScope.ServiceProvider.GetRequiredService<
                 FinanceBotDbContext>();
             Compra compra = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(33.50, "Uber para trabalho", Categoria.Uber, DateTime.UtcNow)).Compra;
-            financeBotDbContext.Compras.Add(compra);
+            Compra other = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(10, "Preservada", Categoria.Mercado, DateTime.UtcNow)).Compra;
+            financeBotDbContext.Compras.AddRange(compra, other);
             financeBotDbContext.SaveChanges();
             compraId = compra.Id;
+            otherId = other.Id;
         }
 
         TelegramWebhookRequest webhookRequest = new TelegramWebhookRequest
@@ -443,7 +446,7 @@ public sealed class TelegramWebhookEndpointTests
                 {
                     Id = 998877
                 },
-                Text = $"/deletar {compraId}"
+                Text = $"  /DELETAR\t00{compraId}  "
             }
         };
 
@@ -454,13 +457,65 @@ public sealed class TelegramWebhookEndpointTests
         Assert.Equal(HttpStatusCode.OK, httpResponseMessage.StatusCode);
         SentTelegramMessage sentTelegramMessage = Assert.Single(
             financeBotApiFactory.RecordingTelegramMessageHandler.SentMessages);
-        Assert.Contains("Compra removida: R$ 33,50", sentTelegramMessage.Text);
-        Assert.Contains("Uber para trabalho", sentTelegramMessage.Text);
+        Assert.Equal(998877, sentTelegramMessage.ChatId);
+        Assert.Equal("Compra removida: R$ 33,50 - Uber para trabalho (Uber)", sentTelegramMessage.Text);
+
+        using HttpResponseMessage repeatedResponse = await httpClient.PostAsJsonAsync(
+            "/telegram/webhook", webhookRequest);
+        Assert.Equal(HttpStatusCode.OK, repeatedResponse.StatusCode);
+        Assert.Equal(2, financeBotApiFactory.RecordingTelegramMessageHandler.SentMessages.Count);
+        Assert.Equal("ID nao encontrado. Nada foi removido.",
+            financeBotApiFactory.RecordingTelegramMessageHandler.SentMessages.Last().Text);
 
         using IServiceScope verifyScope = financeBotApiFactory.Services.CreateScope();
         FinanceBotDbContext verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<
             FinanceBotDbContext>();
-        Assert.Empty(verifyDbContext.Compras.ToList());
+        Compra preserved = Assert.Single(verifyDbContext.Compras.ToList());
+        Assert.Equal(otherId, preserved.Id);
+        Assert.Equal("Preservada", preserved.Descricao);
+        Assert.Equal(10, preserved.Valor);
+        Assert.Equal(Categoria.Mercado, preserved.Categoria);
+    }
+
+    [Theory]
+    [InlineData("/deletar -1", "Uso correto: /deletar <ID>. Exemplo: /deletar 42")]
+    [InlineData("/deletar 0 extra", "Uso correto: /deletar <ID>. Exemplo: /deletar 42")]
+    [InlineData("/deletar 2147483648 extra", "Uso correto: /deletar <ID>. Exemplo: /deletar 42")]
+    [InlineData("/deletar@FinanceBot 1", "Uso correto: /deletar <ID>. Exemplo: /deletar 42")]
+    [InlineData("/deletar 0", "ID invalido para o comando /deletar.")]
+    [InlineData("/deletar 2147483648", "ID invalido para o comando /deletar.")]
+    [InlineData("/deletar 2147483647", "ID nao encontrado. Nada foi removido.")]
+    public async Task PostWebhook_InvalidOrMissingDeleteId_PreservesExpenseAndSendsExistingMessage(string text, string expected)
+    {
+        using FinanceBotApiFactory factory = new(998877);
+        using HttpClient client = factory.CreateClient();
+        int id;
+        DateTime date = new(2026, 1, 20, 10, 30, 0, DateTimeKind.Utc);
+        using (IServiceScope scope = factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<FinanceBotDbContext>();
+            Compra expense = Assert.IsType<CompraCreationResult.Success>(Compra.Criar(33.50, "Preservada", Categoria.Uber, date)).Compra;
+            context.Compras.Add(expense);
+            await context.SaveChangesAsync();
+            id = expense.Id;
+        }
+
+        using HttpResponseMessage response = await client.PostAsJsonAsync("/telegram/webhook", new TelegramWebhookRequest
+        {
+            Message = new TelegramMessageRequest { Chat = new TelegramChatRequest { Id = 998877 }, Text = text }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        SentTelegramMessage reply = Assert.Single(factory.RecordingTelegramMessageHandler.SentMessages);
+        Assert.Equal(998877, reply.ChatId);
+        Assert.Equal(expected, reply.Text);
+        using IServiceScope verify = factory.Services.CreateScope();
+        Compra preserved = Assert.Single(verify.ServiceProvider.GetRequiredService<FinanceBotDbContext>().Compras);
+        Assert.Equal(id, preserved.Id);
+        Assert.Equal(33.50, preserved.Valor);
+        Assert.Equal("Preservada", preserved.Descricao);
+        Assert.Equal(Categoria.Uber, preserved.Categoria);
+        Assert.Equal(date, preserved.Data);
     }
 
     [Fact]
